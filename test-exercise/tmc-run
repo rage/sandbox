@@ -50,7 +50,7 @@ echo "RAM used by ramdisk initially: $(ramdisk_usage_kb) KB"
 echo "Project type: $PROJECT_TYPE"
 
 echo "Files in `pwd`:"
-ls -laR .
+# ls -laR .
 
 # Compile project
 echo "Compiling project..."
@@ -108,12 +108,12 @@ case $PROJECT_TYPE in
   langs)
     export JVM_OPTIONS="-Xms${JAVA_RAM_KB}K -Xmx${JAVA_RAM_KB}K ${runtime_params[@]}"
     java -jar tmc-langs.jar run-tests --exercisePath . --outputPath test_output.txt > stdout.txt 2> stderr.txt || exit 103
-    cat stdout.txt
-    cat stderr.txt
-    java -jar tmc-langs.jar checkstyle --exercisePath . --outputPath validations.json --locale $error_msg_locale > stdout.txt 2> stderr.txt || exit 104
-    cat stdout.txt
-    cat stderr.txt
-    ls -laR
+    #cat stdout.txt
+    #cat stderr.txt
+    #java -jar tmc-langs.jar checkstyle --exercisePath . --outputPath validations.json --locale $error_msg_locale > stdout.txt 2> stderr.txt || exit 104
+    #cat stdout.txt
+    #cat stderr.txt
+    # ls -laR
   ;;
 
   makefile_c)
