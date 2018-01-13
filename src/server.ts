@@ -38,14 +38,16 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.post("/tasks.json", upload.single("file"), apiController.tasks);
 app.get("/status.json", apiController.status);
 
+const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost";
+
 /**
  * Start Express server.
  */
-app.listen(app.get("port"), () => {
+app.listen(app.get("port"), host, () => {
   console.log(
-    "  App is running at http://localhost:%d in %s mode",
-    app.get("port"),
-    app.get("env")
+    `  App is running at http://${host}:${app.get("port")} in ${app.get(
+      "env"
+    )} mode`
   );
   console.log("  Press CTRL-C to stop\n");
 });
