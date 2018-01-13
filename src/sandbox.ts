@@ -61,7 +61,7 @@ async function runTests(
   };
 
   await exec(
-    `docker create --name '${id}' --memory=1G --cpus=1 -i nygrenh/sandbox-next`
+    `docker create --name '${id}' --memory 1G --cpus 1 --network none -i nygrenh/sandbox-next`
   );
   await exec(`docker cp '${path}/.' '${id}':/app`);
   ensureStops(id);
