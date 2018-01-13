@@ -16,7 +16,6 @@ dotenv.config({ path: ".env.example" });
 /**
  * Controllers (route handlers).
  */
-import * as homeController from "./controllers/home";
 import * as apiController from "./controllers/api";
 
 /**
@@ -36,7 +35,6 @@ app.use(bodyParser.urlencoded({ extended: true }));
 /**
  * Primary app routes.
  */
-app.get("/", homeController.index);
 app.post("/tasks.json", upload.single("file"), apiController.tasks);
 app.get("/status.json", apiController.status);
 
