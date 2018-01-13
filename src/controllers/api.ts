@@ -41,7 +41,8 @@ export const tasks = (req: Request, res: Response) => {
           valgrind: output.valgrind,
           validations: output.validations,
           vm_log: output.vm_log,
-          status: "finished"
+          status: output.status,
+          exit_code: output.exit_code
         }
       },
       (err: Error) => {

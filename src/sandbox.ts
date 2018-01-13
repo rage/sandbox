@@ -14,6 +14,8 @@ interface RunResult {
   valgrind: string;
   validations: string;
   vm_log: string;
+  status: string;
+  exit_code: string;
 }
 
 export const handleSubmission = (id: string): Promise<RunResult> => {
@@ -44,6 +46,7 @@ async function runTests(
   const id = `sandbox-submission-${submission_id}`;
   console.time(id);
   const filesToRemoveAfter: string[] = [];
+  let status = "failed";
 
   const getFile = async (filename: string): Promise<string> => {
     const path = `${id}_${filename}`;
@@ -57,23 +60,37 @@ async function runTests(
     }
   };
 
-  await exec(`docker create --name '${id}' --memory=1G --cpus=1 -i nygrenh/sandbox-next`);
+  await exec(
+    `docker create --name '${id}' --memory=1G --cpus=1 -i nygrenh/sandbox-next`
+  );
   await exec(`docker cp '${path}/.' '${id}':/app`);
   ensureStops(id);
-  const log = await exec(`docker start -i '${id}'`);
-  console.log("Ran tests!");
-  const test_output = await getFile("test_output.txt");
-  const stdout = await getFile("stdout.txt");
-  const stderr = await getFile("stderr.txt");
-  const valgrind = await getFile("valgrind.log");
-  const validations = await getFile("validations.json");
-  const vm_log = log.stdout + log.stderr;
+  let vm_log = "";
+  try {
+    const log = await exec(`docker start -i '${id}'`);
+    vm_log = log.stdout + log.stderr;
+    console.log("Ran tests!");
+  } catch (e) {
+    // TODO: handle OOM
+    status = "timeout";
+  }
   setImmediate(async () => {
     await exec(`docker rm --force '${id}'`);
     filesToRemoveAfter.forEach(async path => {
       await unlink(path);
     });
   });
+
+  const test_output = await getFile("test_output.txt");
+  const stdout = await getFile("stdout.txt");
+  const stderr = await getFile("stderr.txt");
+  const valgrind = await getFile("valgrind.log");
+  const validations = await getFile("validations.json");
+  const exit_code = (await getFile("exit_code.txt")).trim();
+  if (status !== "timeout" && exit_code === "0") {
+    status = "finished";
+  }
+
   console.timeEnd(id);
 
   return {
@@ -82,7 +99,9 @@ async function runTests(
     stderr,
     valgrind,
     validations,
-    vm_log
+    vm_log,
+    exit_code,
+    status
   };
 }
 
