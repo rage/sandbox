@@ -1,0 +1,20 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import leastsq
+##########################################################
+###########TEE MYÖS RESIDUALS FUNKTIO#####################
+def main():
+###########################################################
+    #Generate random data
+    xdata = np.linspace(0,2*np.pi,100)
+    y_noise = 0.2 * np.random.normal(size=xdata.size)
+    ydata = np.sin(xdata) + np.cos(xdata) + y_noise
+
+###########################################################
+######### TEE TEHTÄVÄ TÄMÄN ALAPUOLELLE ###################
+
+# ===========================================================
+#Kirjoita ratkaisusi tämän viivan yläpuolelle
+
+if __name__ == "__main__":
+    main()
