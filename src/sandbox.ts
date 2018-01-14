@@ -43,6 +43,7 @@ async function runTests(
   path: string,
   submission_id: string
 ): Promise<RunResult> {
+  const production = process.env.NODE_ENV === "production";
   const id = `sandbox-submission-${submission_id}`;
   console.time(id);
   const filesToRemoveAfter: string[] = [];
@@ -51,7 +52,7 @@ async function runTests(
   const getFile = async (filename: string): Promise<string> => {
     const path = join("work", `${id}_${filename}`);
     try {
-      await exec(`docker cp '${id}':/app/${filename} '${path}'`);
+      await exec(`docker cp '${id}':${production ? "/dev/app/" : "/app/"}${filename} '${path}'`);
       filesToRemoveAfter.push(path);
       return await readFile(path, "utf8");
     } catch (_) {
@@ -60,12 +61,12 @@ async function runTests(
     }
   };
   console.time("running");
+  // TODO: remove the ugly dev hack
   await exec(
-    `docker create --name '${id}' --memory 1G --cpus 1 --network none -i nygrenh/sandbox-next`
+    `docker create --name '${id}' --memory 1G --cpus 1 --network none -i nygrenh/sandbox-next${production ? " /dev/app/tmc-run" : ""}`
   );
-  await exec(`docker cp '${path}/.' '${id}':/app`);
-  await exec(`docker cp 'tmc-run' '${id}':/app/tmc-run`);
-  await exec(`docker cp 'init' '${id}':/app/init`);
+  await exec(`docker cp '${path}/.' '${id}':${production ? "/dev/app/" : "/app"}`);
+  await exec(`docker cp 'tmc-run' '${id}':${production ? "/dev/app/tmc-run" : "/app/tmc-run"}`);
   ensureStops(id);
   let vm_log = "";
   try {
