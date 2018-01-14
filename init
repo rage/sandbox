@@ -1,6 +1,12 @@
 #!/bin/bash -e
 
-cp -R /app /tmp
+cp -R /app /dev
 
-cd /tmp/app/
+cd /dev/app/
 ./tmc-run
+
+cp /dev/app/test_output.txt /app || true
+cp /dev/app/stdout.txt /app || true
+cp /dev/app/stderr.txt /app || true
+cp /dev/app/valgrind.log /app || true
+cp /dev/app/validations.json /app || true

@@ -61,11 +61,11 @@ async function runTests(
   };
   console.time("running");
   await exec(
-    `docker create --name '${id}' --memory 1G --cpus 1 --network none -i nygrenh/sandbox-next`
+    `docker create --name '${id}' --memory 1G --cpus 1 --network none -i nygrenh/sandbox-next /init`
   );
   await exec(`docker cp '${path}/.' '${id}':/app`);
   await exec(`docker cp 'tmc-run' '${id}':/app/tmc-run`);
-  await exec(`docker cp 'init' '${id}':/app/init`);
+  await exec(`docker cp 'init' '${id}':/init`);
   ensureStops(id);
   let vm_log = "";
   try {
