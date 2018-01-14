@@ -1,0 +1,6 @@
+#!/bin/bash -e
+
+cp -R /app /tmp
+
+cd /tmp/app/
+./tmc-run

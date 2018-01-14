@@ -23,6 +23,7 @@ export const tasks = (req: Request, res: Response) => {
     res.json({ error: "Uploaded file was not a tar!" });
     return;
   }
+  // TODO: Handle when this failsfi
   handleSubmission(req.file.filename).then(output => {
     busy_instances--;
     console.log("Got output");

@@ -49,7 +49,7 @@ async function runTests(
   let status = "failed";
 
   const getFile = async (filename: string): Promise<string> => {
-    const path = `${id}_${filename}`;
+    const path = join("work", `${id}_${filename}`);
     try {
       await exec(`docker cp '${id}':/app/${filename} '${path}'`);
       filesToRemoveAfter.push(path);
@@ -59,18 +59,22 @@ async function runTests(
       return "";
     }
   };
-
+  console.time("running");
   await exec(
-    `docker create --name '${id}' --memory 1G --cpus 1 --network none -i nygrenh/sandbox-next`
+    `docker create --name '${id}' -it --memory 1G --cpus 1 --network none -i nygrenh/sandbox-next`
   );
   await exec(`docker cp '${path}/.' '${id}':/app`);
+  await exec(`docker cp 'tmc-run' '${id}':/app/tmc-run`);
+  await exec(`docker cp 'init' '${id}':/app/init`);
   ensureStops(id);
   let vm_log = "";
   try {
     const log = await exec(`docker start -i '${id}'`);
+    console.timeEnd("running");
     vm_log = log.stdout + log.stderr;
     console.log("Ran tests!");
   } catch (e) {
+    console.timeEnd("running");
     // TODO: handle OOM
     status = "timeout";
   }
