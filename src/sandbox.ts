@@ -116,5 +116,5 @@ function ensureStops(id: string) {
       await exec(`docker kill '${id}'`);
       console.log(`Submission ${id} timed out.`);
     } catch (e) {}
-  }, 20000);
+  }, 60000);
 }
