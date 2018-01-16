@@ -66,11 +66,11 @@ async function runTests(
   console.time("running");
   const pwd = join(__dirname, "..");
   await exec(
-    `docker create --name '${id}' --memory 1G --cpus 1 --network none --mount type=bind,source=${pwd}/${path},target=/app -it nygrenh/sandbox-next /app/tmc-run`
+    `docker create --name '${id}' --memory 1G --cpus 1 --network none --mount type=bind,source=${pwd}/${path},target=/app -it nygrenh/sandbox-next /app/init`
   );
   // await exec(`docker cp '${path}/.' '${id}':/app`);
   await exec(`docker cp 'tmc-run' '${id}':/app/tmc-run`);
-  await exec(`docker cp 'init' '${id}':/init`);
+  await exec(`docker cp 'init' '${id}':/app/init`);
   ensureStops(id);
   let vm_log = "";
   try {
@@ -98,8 +98,7 @@ async function runTests(
   const stderr = await getFile("stderr.txt");
   const valgrind = await getFile("valgrind.log");
   const validations = await getFile("validations.json");
-  // const exit_code = (await getFile("exit_code.txt")).trim();
-  const exit_code = "0";
+  const exit_code = (await getFile("exit_code.txt")).trim();
   if (status !== "timeout" && exit_code === "0") {
     status = "finished";
   }
