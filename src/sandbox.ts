@@ -49,24 +49,22 @@ async function runTests(
 ): Promise<RunResult> {
   const id = `sandbox-submission-${submission_id}`;
   console.time(id);
-  const filesToRemoveAfter: string[] = [];
+  const pwd = join(__dirname, "..");
+  const fullPath = `${pwd}/${path}`;
   let status = "failed";
 
   const getFile = async (filename: string): Promise<string> => {
-    const path = join("work", `${id}_${filename}`);
     try {
-      await exec(`docker cp '${id}':/app/${filename} '${path}'`);
-      filesToRemoveAfter.push(path);
-      return await readFile(path, "utf8");
+      return await readFile(join(fullPath, filename), "utf8");
     } catch (_) {
       console.warn(`Could not find ${filename}`);
       return "";
     }
   };
   console.time("running");
-  const pwd = join(__dirname, "..");
+
   await exec(
-    `docker create --name '${id}' --memory 1G --cpus 1 --network none --mount type=bind,source=${pwd}/${path},target=/app -it nygrenh/sandbox-next /app/init`
+    `docker create --name '${id}' --memory 1G --cpus 1 --network none --mount type=bind,source=${fullPath},target=/app -it nygrenh/sandbox-next /app/init`
   );
   // await exec(`docker cp '${path}/.' '${id}':/app`);
   await exec(`docker cp 'tmc-run' '${id}':/app/tmc-run`);
@@ -88,9 +86,7 @@ async function runTests(
   }
   setImmediate(async () => {
     await exec(`docker rm --force '${id}'`);
-    filesToRemoveAfter.forEach(async path => {
-      await unlink(path);
-    });
+    // TODO: unlink everything in the submission folder.
   });
 
   const test_output = await getFile("test_output.txt");
