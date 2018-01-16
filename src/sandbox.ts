@@ -75,7 +75,7 @@ async function runTests(
   let vm_log = "";
   try {
     console.time("exec run");
-    const log = await exec(`docker start -i '${id}'`);
+    const log = await exec(`docker start -i '${id}' | ts -s`);
     console.timeEnd("exec run");
     console.timeEnd("running");
     vm_log = log.stdout + log.stderr;
