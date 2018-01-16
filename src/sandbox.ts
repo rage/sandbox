@@ -39,6 +39,10 @@ export const handleSubmission = (id: string): Promise<RunResult> => {
   });
 };
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function runTests(
   path: string,
   submission_id: string
@@ -60,20 +64,24 @@ async function runTests(
     }
   };
   console.time("running");
+  const pwd = join(__dirname, "..");
   await exec(
-    `docker create --name '${id}' --memory 1G --cpus 1 --network none -i nygrenh/sandbox-next /init`
+    `docker create --name '${id}' --memory 1G --cpus 1 --network none --mount type=bind,source=${pwd}/${path},target=/app -it nygrenh/sandbox-next /app/tmc-run`
   );
-  await exec(`docker cp '${path}/.' '${id}':/app`);
+  // await exec(`docker cp '${path}/.' '${id}':/app`);
   await exec(`docker cp 'tmc-run' '${id}':/app/tmc-run`);
   await exec(`docker cp 'init' '${id}':/init`);
   ensureStops(id);
   let vm_log = "";
   try {
+    console.time("exec run");
     const log = await exec(`docker start -i '${id}'`);
+    console.timeEnd("exec run");
     console.timeEnd("running");
     vm_log = log.stdout + log.stderr;
     console.log("Ran tests!");
   } catch (e) {
+    console.warn(JSON.stringify(e));
     console.timeEnd("running");
     // TODO: handle OOM
     status = "timeout";
