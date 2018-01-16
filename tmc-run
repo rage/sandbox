@@ -4,7 +4,7 @@
 # This gets run under 'su', so we want to source profile mostly to get any special PATH.
 # Sourcing seems to terminate the script with -e, even when the return status is 0.
 # I have absolutely no idea why. We work around it with the '|| true'.
-. /etc/profile || true
+#. /etc/profile || true
 
 # Source user params if any.
 # Though the variable names and content format here are limited,
@@ -20,26 +20,6 @@ if [ -z "$error_msg_locale" ]; then
   echo "Setting error_msg_locale"
   error_msg_locale=en
 fi
-
-ramdisk_usage_kb() {
-  df / | tail -n 1 | awk '{ print $3 }'
-}
-
-# Identify project type
-PROJECT_TYPE=langs
-
-mvn -v
-export M3_HOME=/opt/apache-maven-3.1.1
-JAVAC_EXE_PATH=`readlink -f \`which javac\``
-
-TOTAL_RAM_KB=`cat /proc/meminfo | grep MemTotal | awk '{print $2}'`
-
-echo "Total RAM: ${TOTAL_RAM_KB}KB"
-echo "RAM used by ramdisk initially: $(ramdisk_usage_kb) KB"
-echo "Project type: $PROJECT_TYPE"
-
-echo "Files in `pwd`:"
-# ls -laR .
 
 # Source .tmcrc if any
 if [ -f .tmcrc ]; then

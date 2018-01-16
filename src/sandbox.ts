@@ -64,7 +64,7 @@ async function runTests(
   console.time("running");
 
   await exec(
-    `docker create --name '${id}' --memory 1G --cpus 1 --network none --mount type=bind,source=${fullPath},target=/app -it nygrenh/sandbox-next /app/init`
+    `docker create --name '${id}' --memory 1G --cpus 1 --network none --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${fullPath},target=/app -it nygrenh/sandbox-next /app/init`
   );
   // await exec(`docker cp '${path}/.' '${id}':/app`);
   await exec(`docker cp 'tmc-run' '${id}':/app/tmc-run`);
