@@ -6,7 +6,7 @@ import { Response, Request, NextFunction } from "express";
 
 import { handleSubmission } from "../sandbox";
 
-const INSTANCES = 10;
+const INSTANCES = 2;
 
 let busy_instances = 0;
 
@@ -23,7 +23,7 @@ export const tasks = (req: Request, res: Response) => {
     res.json({ error: "Uploaded file was not a tar!" });
     return;
   }
-  // TODO: Handle when this failsfi
+  // TODO: Handle when this fails
   handleSubmission(req.file.filename).then(output => {
     busy_instances--;
     console.log("Got output");
