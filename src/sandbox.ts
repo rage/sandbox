@@ -34,6 +34,15 @@ export const handleSubmission = (id: string): Promise<RunResult> => {
           `An error occurred while running: ${id}. Error was: ${e}`
         );
         reject(e);
+      } finally {
+        setImmediate(async () => {
+          try {
+            await unlink(path);
+            await exec(`rm -rf '${outputPath}'`);
+          } catch (e) {
+            console.warn(`Could not clean up ${id}.`, e);
+          }
+        });
       }
     });
   });
@@ -86,7 +95,6 @@ async function runTests(
   }
   setImmediate(async () => {
     await exec(`docker rm --force '${id}'`);
-    // TODO: unlink everything in the submission folder.
   });
 
   const test_output = await getFile("test_output.txt");
