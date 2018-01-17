@@ -5,6 +5,9 @@ import * as request from "request";
 import { Response, Request, NextFunction } from "express";
 
 import { handleSubmission } from "../sandbox";
+import { promisify } from "util";
+import { join } from "path";
+const unlink = promisify(require("fs").unlink);
 
 const INSTANCES = 2;
 
@@ -13,6 +16,13 @@ let busy_instances = 0;
 export const tasks = (req: Request, res: Response) => {
   if (busy_instances >= INSTANCES) {
     res.status(500).json({ status: "busy" });
+    setImmediate(async () => {
+      try {
+        await unlink(join("uploads", req.file.filename));
+      } catch (e) {
+        console.error(`Could not unlink ${req.file.filename}.`, e);
+      }
+    });
     return;
   }
   busy_instances++;
