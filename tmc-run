@@ -32,9 +32,8 @@ echo "Running tests..."
 
 export JVM_OPTIONS="-Xms${JAVA_RAM_KB}K -Xmx${JAVA_RAM_KB}K ${runtime_params[@]}"
 export LC_ALL=C.UTF-8
-java -jar tmc-langs.jar run-tests --exercisePath . --outputPath /app/test_output.txt > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2) || exit 104
-echo "Running checkstyle"
-java -jar tmc-langs.jar checkstyle --exercisePath . --outputPath /app/validations.json --locale $error_msg_locale > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2) || exit 104
+java -jar tmc-langs.jar run-tests --exercisePath . --outputPath /app/test_output.txt --checkstyleOutputPath /app/validations.json --locale $error_msg_locale > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2) || exit 104
+
 echo "All the files:"
 ls -laR
 echo "tmc-run completed successfully"
