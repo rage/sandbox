@@ -18,7 +18,7 @@ interface RunResult {
   exit_code: string;
 }
 
-export const handleSubmission = (id: string): Promise<RunResult> => {
+export const handleSubmission = (id: string, dockerImage?: string): Promise<RunResult> => {
   return new Promise((resolve, reject) => {
     console.log("Handling submission" + id);
     const path = join("uploads", id);
@@ -28,7 +28,8 @@ export const handleSubmission = (id: string): Promise<RunResult> => {
       console.log("Extracted");
       await exec(`chmod -R 777 ${outputPath}`);
       try {
-        const results = await runTests(outputPath, id);
+        await exec(`chmod -R 777 ${outputPath}`);
+        const results = await runTests(outputPath, id, dockerImage);
         resolve(results);
       } catch (e) {
         console.error(
@@ -55,7 +56,8 @@ function sleep(ms: number) {
 
 async function runTests(
   path: string,
-  submission_id: string
+  submission_id: string,
+  dockerImage?: string
 ): Promise<RunResult> {
   const id = `sandbox-submission-${submission_id}`;
   console.time(id);
@@ -73,9 +75,10 @@ async function runTests(
   };
   console.time("running");
 
-  await exec(
-    `docker create --name '${id}' --memory 1G --cpus 1 --network none --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${fullPath},target=/app -it nygrenh/sandbox-next /app/init`
-  );
+  const image = dockerImage || "nygrenh/sandbox-next";
+  const command = `docker create --name '${id}' --memory 1G --cpus 1 --network none --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${fullPath},target=/app -it ${image} /app/init`;
+  console.log(`Creating a container with '${command}'`);
+  await exec(command);
   // await exec(`docker cp '${path}/.' '${id}':/app`);
   await exec(`docker cp 'tmc-run' '${id}':/app/tmc-run`);
   await exec(`docker cp 'init' '${id}':/app/init`);

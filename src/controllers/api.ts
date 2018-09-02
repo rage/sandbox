@@ -13,6 +13,16 @@ const INSTANCES = 2;
 
 let busy_instances = 0;
 
+const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next-maven"];
+
+export const guard = (req: Request, res: Response, next: NextFunction) => {
+  if (busy_instances >= INSTANCES) {
+    res.status(500).json({ status: "busy" });
+    return;
+  }
+  next();
+};
+
 export const tasks = (req: Request, res: Response) => {
   if (busy_instances >= INSTANCES) {
     res.status(500).json({ status: "busy" });
@@ -30,11 +40,17 @@ export const tasks = (req: Request, res: Response) => {
   // console.log(`Received submission ${id}.`);
   console.log(req.file);
   if (req.file.mimetype !== "application/x-tar") {
-    res.json({ error: "Uploaded file was not a tar!" });
+    res.status(400).json({ error: "Uploaded file was not a tar!" });
     return;
   }
+
+  const dockerImage = req.body.docker_image;
+  if (dockerImage && ALLOWED_ALTERNATIVE_DOCKER_IMAGES.indexOf(dockerImage) === -1) {
+      res.status(400).json({ error: "Docker image was not whitelisted." });
+      return;
+  }
   // TODO: Handle when this fails
-  handleSubmission(req.file.filename).then(output => {
+  handleSubmission(req.file.filename, dockerImage).then(output => {
     busy_instances--;
     console.log("Got output");
     console.log(output);
