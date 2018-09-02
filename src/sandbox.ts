@@ -26,6 +26,7 @@ export const handleSubmission = (id: string): Promise<RunResult> => {
     const extractStream = createReadStream(path).pipe(tar.extract(outputPath));
     extractStream.on("finish", async () => {
       console.log("Extracted");
+      await exec(`chmod -R 777 ${outputPath}`);
       try {
         const results = await runTests(outputPath, id);
         resolve(results);

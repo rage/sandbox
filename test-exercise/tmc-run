@@ -12,6 +12,8 @@
 #
 # Included variables: error_msg_locale
 #
+ls -laR
+
 if [ -r .tmcparams ]; then
   . ./.tmcparams
 fi
