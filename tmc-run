@@ -27,6 +27,11 @@ if [ -f .tmcrc ]; then
   . ./.tmcrc
 fi
 
+if [ -e /tmc-langs.jar ]; then
+  echo "Copying tmc-langs.jar from the image"
+  mv /tmc-langs.jar tmc-langs.jar
+fi
+
 JAVA_RAM_KB=652700
 echo "Running tests..."
 
