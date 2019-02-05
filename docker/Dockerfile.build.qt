@@ -1,0 +1,19 @@
+FROM debian:stretch
+
+RUN echo "deb-src http://deb.debian.org/debian stretch main" >> /etc/apt/sources.list &&\
+    apt-get update && \
+    apt-get build-dep -yy qt5-default && \
+    apt-get install -yy wget build-essential python && \
+    rm -rf /var/lib/apt/lists/*  && \
+    mkdir /app && mkdir /opt/qt
+
+WORKDIR /app
+
+RUN wget 'http://download.qt.io/official_releases/qt/5.12/5.12.0/single/qt-everywhere-src-5.12.0.tar.xz' && \
+    tar -xf qt-everywhere-src-5.12.0.tar.xz && \
+    cd qt-*/  && \
+    ./configure -opensource -confirm-license -prefix /opt/qt \
+    -no-opengl -no-gstreamer -disable-cups -no-compile-examples -no-icu -no-opengl -no-sql-sqlite -no-cups -no-qml-debug -skip qtscript -nomake examples -nomake tests -skip qtwebengine -skip qtvirtualkeyboard -skip qtcharts -skip qtwebchannel -skip qtpurchasing -skip qtwayland -skip qtwebview -skip qt3d -skip qtandroidextras -skip qtcanvas3d -skip qtconnectivity -skip qtdatavis3d -skip qtdoc -skip qtgamepad -skip qtlocation -skip qtmacextras -skip qtnetworkauth -skip qtremoteobjects -skip qtsensors -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtwebsockets -skip qtwebglplugin -skip qtwinextras  && \
+    make -j4
+
+RUN cd qt-*/ && make install
