@@ -15,6 +15,10 @@ COPY  ./Qt5.12 /opt/qt
 
 ENV PATH="/opt/qt/bin:${PATH}"
 
+RUN Rscript -e 'install.packages(c("devtools","testthat", "httr", "curl"),repos="https://ftp.eenet.ee/pub/cran/")' && Rscript -e 'devtools::install_github("RTMC/tmc-r-tester/tmcRtestrunner")'
+
+RUN pip3 install spacy numpy scipy matplotlib sklearn scikit-image pandas seaborn lxml matplotlib
+
 WORKDIR /app
 RUN chown user /app
 USER user
@@ -28,17 +32,29 @@ RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.6:test || true
 
 COPY maven-template-2 /app/
 
+RUN mvn clean compile test-compile
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
 RUN mvn test || true
 RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.6:test || true
 
-USER root
-RUN Rscript -e 'install.packages(c("devtools","testthat", "httr", "curl"),repos="https://ftp.eenet.ee/pub/cran/")' && Rscript -e 'devtools::install_github("RTMC/tmc-r-tester/tmcRtestrunner")'
+COPY maven-template-3 /app/
+
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.6:test || true
+
+COPY maven-template-4 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.6:test || true
+
 ENV M2_HOME="/usr/share/maven"
 
-RUN pip3 install spacy numpy scipy matplotlib sklearn scikit-image pandas seaborn lxml matplotlib
 
 COPY Dockerfile /Dockerfile
 
-COPY tmc-langs.jar /tmc-langs.jar
+COPY tmc-langs-cli-0.7.14-SNAPSHOT.jar /tmc-langs.jar
 
 USER user
