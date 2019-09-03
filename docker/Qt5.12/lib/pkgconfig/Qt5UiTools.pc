@@ -1,0 +1,14 @@
+prefix=/opt/qt
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+
+Name: Qt5 UiTools
+Description: Qt UiTools module
+Version: 5.12.0
+Libs: -L${libdir} -lQt5UiTools 
+Libs.private: -L/opt/qt/lib -lQt5Widgets -lQt5Gui -lQt5Core -lpthread -lQt5Widgets -L/opt/qt/lib -lQt5Gui -lQt5Core -lpthread   
+Cflags: -DQT_UITOOLS_LIB -I${includedir}/QtUiTools -I${includedir}
+Requires: Qt5Core Qt5Gui Qt5Widgets
+

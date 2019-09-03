@@ -11,13 +11,13 @@ RUN apt-get update && \
 
  RUN bash -c "mkdir -p /pythonbuild && cd /pythonbuild && wget https://www.python.org/ftp/python/3.7.0/Python-3.7.0.tgz && tar -xzvf Python-3.7.0.tgz && cd Python-3.7.0/ && ./configure && make && make install"
 
-COPY  ./Qt5.12 /opt/qt
+COPY ./Qt5.12 /opt/qt
 
 ENV PATH="/opt/qt/bin:${PATH}"
 
 RUN Rscript -e 'install.packages(c("devtools","testthat", "httr", "curl"),repos="https://ftp.eenet.ee/pub/cran/")' && Rscript -e 'devtools::install_github("RTMC/tmc-r-tester/tmcRtestrunner")'
 
-RUN pip3 install spacy numpy scipy matplotlib sklearn scikit-image pandas seaborn lxml matplotlib
+RUN pip3 install spacy numpy scipy matplotlib sklearn scikit-image pandas seaborn lxml matplotlib statsmodels nbformat beautifulsoup4
 
 WORKDIR /app
 RUN chown user /app
@@ -50,8 +50,49 @@ RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:reso
 RUN mvn test || true
 RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
 
-ENV M2_HOME="/usr/share/maven"
+COPY maven-template-5 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
 
+COPY maven-template-6 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
+
+COPY maven-template-7 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
+
+COPY maven-template-8 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
+
+COPY maven-template-9 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
+
+COPY maven-template-10 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
+
+COPY maven-template-11 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
+
+ENV M2_HOME="/usr/share/maven"
 
 COPY Dockerfile /Dockerfile
 
