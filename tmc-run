@@ -16,6 +16,8 @@ if [ -r .tmcparams ]; then
   . ./.tmcparams
 fi
 
+echo "User id: $(id)"
+
 if [ -z "$error_msg_locale" ]; then
   echo "Setting error_msg_locale"
   error_msg_locale=en
@@ -29,7 +31,7 @@ fi
 
 if [ -e /tmc-langs.jar ]; then
   echo "Copying tmc-langs.jar from the image"
-  mv /tmc-langs.jar tmc-langs.jar
+  cp /tmc-langs.jar tmc-langs.jar
 fi
 
 JAVA_RAM_KB=652700
