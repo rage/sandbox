@@ -76,7 +76,7 @@ async function runTests(
   console.time("running");
 
   const image = dockerImage || "nygrenh/sandbox-next";
-  const command = `docker create --name '${id}' --memory 1G --cpus 1 --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${fullPath},target=/app -it ${image} /app/init`;
+  const command = `docker create --name '${id}' --network none --memory 1G --cpus 1 --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${fullPath},target=/app -it ${image} /app/init`;
   console.log(`Creating a container with '${command}'`);
   await exec(command);
   // await exec(`docker cp '${path}/.' '${id}':/app`);
