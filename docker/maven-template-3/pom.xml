@@ -47,7 +47,7 @@
         <repository>
             <id>tmc</id>
             <name>TMC repo</name>
-            <url>http://maven.testmycode.net/nexus/content/groups/public</url>
+            <url>https://maven.mooc.fi/releases</url>
             <releases>
                 <enabled>true</enabled>
             </releases>
@@ -61,7 +61,7 @@
         <pluginRepository>
             <id>tmc</id>
             <name>TMC repo</name>
-            <url>http://maven.testmycode.net/nexus/content/groups/public</url>
+            <url>https://maven.mooc.fi/releases</url>
             <releases>
                 <enabled>true</enabled>
             </releases>
