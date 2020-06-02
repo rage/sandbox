@@ -7,13 +7,14 @@ import { Response, Request, NextFunction } from "express";
 import { handleSubmission } from "../sandbox";
 import { promisify } from "util";
 import { join } from "path";
+import * as os from "os";
 const unlink = promisify(require("fs").unlink);
 
-const INSTANCES = 2;
+const INSTANCES = os.cpus().length;
 
 let busy_instances = 0;
 
-const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next-maven"];
+const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next-maven", "joniaromaa/tmc-csharp"];
 
 export const guard = (req: Request, res: Response, next: NextFunction) => {
   if (busy_instances >= INSTANCES) {

@@ -7,7 +7,11 @@ lib-cov
 *.pid
 *.gz
 *.swp
-
+.project
+.settings
+.classpath
+.factorypath
+target
 pids
 logs
 results
