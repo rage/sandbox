@@ -104,6 +104,18 @@ RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:reso
 RUN mvn test || true
 RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
 
+COPY maven-template-14 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
+
+COPY maven-template-15 /app
+RUN mvn clean compile test-compile || true
+RUN mvn dependency:resolve-plugins dependency:go-offline compile dependency:resolve-plugins
+RUN mvn test || true
+RUN mvn fi.helsinki.cs.tmc:tmc-maven-plugin:1.12:test || true
+
 ENV M2_HOME="/usr/share/maven"
 
 COPY Dockerfile /Dockerfile
