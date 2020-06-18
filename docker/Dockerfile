@@ -108,6 +108,6 @@ ENV M2_HOME="/usr/share/maven"
 
 COPY Dockerfile /Dockerfile
 
-COPY tmc-langs-cli-0.7.14-SNAPSHOT.jar /tmc-langs.jar
+COPY tmc-langs-cli-0.8.1-SNAPSHOT.jar /tmc-langs.jar
 
 USER user
