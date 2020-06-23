@@ -58,8 +58,8 @@ setInterval(() => {
   apiController.ALLOWED_ALTERNATIVE_DOCKER_IMAGES.forEach(async (image) => {
     try {
       await exec(`docker pull ${image}`)
-    } catch {
-      console.error(`Could not pull image ${image}`)
+    } catch (e) {
+      console.error(`Could not pull image ${image}`, e)
     }
   })
 }, 10*60*1000)
