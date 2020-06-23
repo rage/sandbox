@@ -6,7 +6,9 @@ import * as errorHandler from "errorhandler";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as multer from "multer";
+import { promisify } from "util";
 const upload = multer({ dest: "uploads/" });
+const exec = promisify(require("child_process").exec);
 
 /**
  * Load environment variables from .env file, where API keys and passwords are configured.
@@ -51,5 +53,15 @@ app.listen(app.get("port"), host, () => {
   );
   console.log("  Press CTRL-C to stop\n");
 });
+
+setInterval(() => {
+  apiController.ALLOWED_ALTERNATIVE_DOCKER_IMAGES.forEach(async (image) => {
+    try {
+      await exec(`docker pull ${image}`)
+    } catch {
+      console.error(`Could not pull image ${image}`)
+    }
+  })
+}, 10*60*1000)
 
 module.exports = app;

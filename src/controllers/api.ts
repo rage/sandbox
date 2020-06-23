@@ -14,7 +14,7 @@ const INSTANCES = os.cpus().length;
 
 let busy_instances = 0;
 
-const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next-maven", "testmycode/tmc-sandbox-csharp", "testmycode/tmc-sandbox-tmc-langs-rust"];
+export const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next", "eu.gcr.io/moocfi-public/tmc-sandbox-csharp", "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust"];
 
 export const guard = (req: Request, res: Response, next: NextFunction) => {
   if (busy_instances >= INSTANCES) {
