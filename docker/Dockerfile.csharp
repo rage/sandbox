@@ -17,6 +17,6 @@ RUN dotnet new console -o csharp-template
 
 RUN dotnet build csharp-template
 
-COPY tmc-langs-cli-0.8.1-SNAPSHOT.jar /tmc-langs.jar
+COPY tmc-langs-cli-0.8.2-SNAPSHOT.jar /tmc-langs.jar
 
 USER user
