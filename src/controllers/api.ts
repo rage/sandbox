@@ -81,7 +81,11 @@ export const tasks = (req: Request, res: Response) => {
         console.log("Notified succesfully!");
       }
     );
-  });
+  }).catch((reason => {
+    busy_instances--;
+    console.error("Handling submission failed.", reason)
+    return res.status(503).json({ error: `Handling message failed. ${reason}`})
+  }));
   res.json({ message: "ok" });
 };
 
