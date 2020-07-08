@@ -2,7 +2,10 @@
 
 if [ -e /tmc-run ]; then
   echo "Copying tmc-run from the image"
-  cp /tmc-run tmc-run || echo "Copying tmc-run failed"
+  cp /tmc-run custom-tmc-run || echo "Copying tmc-run failed"
+
+  ( set +e; ./custom-tmc-run; echo -n $? > exit_code.txt; true )
+else
+  ( set +e; ./tmc-run; echo -n $? > exit_code.txt; true )
 fi
 
-( set +e; ./tmc-run; echo -n $? > exit_code.txt; true )
