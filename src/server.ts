@@ -64,4 +64,8 @@ setInterval(() => {
   })
 }, 10*60*1000)
 
+setInterval(() => {
+  exec('docker image prune -a --filter "until=24h"')
+}, 24*60*60*1000)
+
 module.exports = app;
