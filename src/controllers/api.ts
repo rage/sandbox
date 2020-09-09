@@ -14,8 +14,8 @@ const INSTANCES = os.cpus().length;
 
 let busy_instances = 0;
 
-export const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next", "eu.gcr.io/moocfi-public/tmc-sandbox-csharp", "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust", "eu.gcr.io/moocfi-public/tmc-sandbox-cyber-security-base"];
-
+export const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next"];
+const ALLOWED_DOCKER_IMAGE_PREFIX = "eu.gcr.io/moocfi-public/tmc-sandbox-"
 
 export const guard = (req: Request, res: Response, next: NextFunction) => {
   if (busy_instances >= INSTANCES) {
@@ -46,8 +46,8 @@ export const tasks = (req: Request, res: Response) => {
     return;
   }
 
-  const dockerImage = req.body.docker_image;
-  if (dockerImage && ALLOWED_ALTERNATIVE_DOCKER_IMAGES.indexOf(dockerImage) === -1) {
+  const dockerImage: string = req.body.docker_image.toString();
+  if (dockerImage && !(dockerImage.startsWith(ALLOWED_DOCKER_IMAGE_PREFIX) || ALLOWED_ALTERNATIVE_DOCKER_IMAGES.indexOf(dockerImage) !== -1)) {
       res.status(400).json({ error: "Docker image was not whitelisted." });
       return;
   }

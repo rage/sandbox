@@ -7,6 +7,8 @@ import * as dotenv from "dotenv";
 import * as path from "path";
 import * as multer from "multer";
 import { promisify } from "util";
+import axios from "axios";
+
 const upload = multer({ dest: "uploads/" });
 const exec = promisify(require("child_process").exec);
 
@@ -54,14 +56,29 @@ app.listen(app.get("port"), host, () => {
   console.log("  Press CTRL-C to stop\n");
 });
 
-setInterval(() => {
-  apiController.ALLOWED_ALTERNATIVE_DOCKER_IMAGES.forEach(async (image) => {
-    try {
-      await exec(`docker pull ${image}`)
-    } catch (e) {
-      console.error(`Could not pull image ${image}`, e)
+async function pullImage(image: string) {
+  console.log("Pulling " + image);
+  try {
+    await exec(`docker pull ${image}`)
+  } catch (e) {
+    console.error(`Could not pull image ${image}`, e)
+  }
+}
+
+setInterval(async () => {
+  for (const image of apiController.ALLOWED_ALTERNATIVE_DOCKER_IMAGES) {
+    await pullImage(image)
+  }
+
+  console.log("Getting a list of all alternative images");
+  const res = await axios.get("https://eu.gcr.io/v2/moocfi-public/tags/list");
+  const images = res.data.child
+  if (images && images instanceof Array) {
+    for (const image of images.filter(o=> o.startsWith("tmc-sandbox-"))) {
+      await pullImage(image)
     }
-  })
+
+  }
 }, 10*60*1000)
 
 setInterval(() => {
