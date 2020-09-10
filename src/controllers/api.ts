@@ -46,7 +46,7 @@ export const tasks = (req: Request, res: Response) => {
     return;
   }
 
-  const dockerImage: string = req.body.docker_image.toString();
+  const dockerImage: string = req.body.docker_image;
   if (dockerImage && !(dockerImage.startsWith(ALLOWED_DOCKER_IMAGE_PREFIX) || ALLOWED_ALTERNATIVE_DOCKER_IMAGES.indexOf(dockerImage) !== -1)) {
       res.status(400).json({ error: "Docker image was not whitelisted." });
       return;
