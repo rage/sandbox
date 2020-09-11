@@ -1,0 +1,5 @@
+{
+  "filepath": "*/**.ts",
+  "semi": false,
+  "trailingComma": "all"
+}

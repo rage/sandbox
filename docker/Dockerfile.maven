@@ -1,5 +1,0 @@
-FROM nygrenh/sandbox-next
-
-COPY maven-template/pom.xml /app/pom.xml
-
-RUN mvn compile && rm /app/pom.xml

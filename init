@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "Wat"
+
 if [ -e /tmc-run ]; then
   echo "Copying tmc-run from the image"
   cp /tmc-run custom-tmc-run || echo "Copying tmc-run failed"
