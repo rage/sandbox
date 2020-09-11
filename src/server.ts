@@ -75,7 +75,7 @@ setInterval(async () => {
   const images = res.data.child
   if (images && images instanceof Array) {
     for (const image of images.filter(o=> o.startsWith("tmc-sandbox-"))) {
-      await pullImage(image)
+      await pullImage(`eu.gcr.io/moocfi-public/${image}`)
     }
 
   }
