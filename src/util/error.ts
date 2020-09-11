@@ -1,6 +1,6 @@
 class CustomError extends Error {
-  constructor(params?: any) {
-    super(params)
+  constructor(message?: string) {
+    super(message)
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, CustomError)
     }

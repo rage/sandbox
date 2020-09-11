@@ -9,8 +9,8 @@ import {
 
 const errorHandler = async (
   ctx: CustomContext,
-  next: () => Promise<any>,
-): void => {
+  next: () => Promise<unknown>,
+): Promise<void> => {
   try {
     await next()
   } catch (error) {

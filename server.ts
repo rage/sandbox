@@ -4,8 +4,8 @@ import app from "./src/app"
 import { ALLOWED_ALTERNATIVE_DOCKER_IMAGES } from "./src/controllers"
 import Axios from "axios"
 import { promisify } from "util"
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const exec = promisify(require("child_process").exec)
+import { exec as origExec } from "child_process"
+const exec = promisify(origExec)
 
 const port = process.env.PORT || 3231
 

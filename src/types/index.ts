@@ -6,4 +6,5 @@ export interface CustomContext extends ParameterizedContext {
   requestId: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface CustomState {}

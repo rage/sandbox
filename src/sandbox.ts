@@ -3,12 +3,11 @@ import { join, resolve } from "path"
 import { createReadStream } from "fs"
 import { promisify } from "util"
 import winston from "winston"
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const exec = promisify(require("child_process").exec)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const readFile = promisify(require("fs").readFile)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const unlink = promisify(require("fs").unlink)
+import { exec as origExec } from "child_process"
+import { readFile as origReadFile, unlink as origUnlink } from "fs"
+const exec = promisify(origExec)
+const readFile = promisify(origReadFile)
+const unlink = promisify(origUnlink)
 
 export interface RunResult {
   test_output: string

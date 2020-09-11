@@ -25,8 +25,8 @@ export const GlobalLogger = winston.createLogger({
 
 const loggerMiddleware = async (
   ctx: CustomContext,
-  next: () => Promise<any>,
-) => {
+  next: () => Promise<unknown>,
+): Promise<void> => {
   const start = Date.now()
   ctx.state.start = start
   const requestId = uuidv4()
