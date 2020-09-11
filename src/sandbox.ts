@@ -5,6 +5,7 @@ import { promisify } from "util"
 import winston from "winston"
 import { exec as origExec } from "child_process"
 import { readFile as origReadFile, unlink as origUnlink } from "fs"
+import loggerMiddleware from "./middleware/logger"
 const exec = promisify(origExec)
 const readFile = promisify(origReadFile)
 const unlink = promisify(origUnlink)
@@ -102,9 +103,6 @@ async function runTests(
       status = "crashed"
     }
   }
-  setImmediate(async () => {
-    await exec(`docker rm --force '${id}'`)
-  })
 
   const test_output = await getFile("test_output.txt")
   const stdout = await getFile("stdout.txt")
@@ -113,9 +111,16 @@ async function runTests(
   const validations = await getFile("validations.json")
   const exit_code = (await getFile("exit_code.txt")).trim()
 
+  log.info("a", { exit_code })
+  console.log(vm_log)
+
   if (status !== "timeout" && exit_code === "0") {
     status = "finished"
   }
+
+  setImmediate(async () => {
+    await exec(`docker rm --force '${id}'`)
+  })
 
   return {
     test_output,

@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "ts-watch": "tsc --preserveWatchOutput -w -p tsconfig.json",
     "watch": "sleep 5 && nodemon ./dist/server.js",
-    "dev": "concurrently npm:ts-watch npm:watch",
+    "dev": "npm run build && concurrently npm:ts-watch npm:watch",
     "test": "jest --runInBand",
     "migrate": "knex migrate:latest"
   },
