@@ -7,7 +7,10 @@ import {
   SandboxBusyError,
 } from "../util/error"
 
-const errorHandler = async (ctx: CustomContext, next: () => Promise<any>) => {
+const errorHandler = async (
+  ctx: CustomContext,
+  next: () => Promise<any>,
+): void => {
   try {
     await next()
   } catch (error) {

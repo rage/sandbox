@@ -31,9 +31,7 @@ const loggerMiddleware = async (
   ctx.state.start = start
   const requestId = uuidv4()
   const log = GlobalLogger.child({ requestId })
-  // @ts-ignore
   ctx.log = log
-  // @ts-ignore
   ctx.requestId = requestId
   log.info(`${ctx.request.method} ${ctx.req.url}`, {
     ip: ctx.request.ip,
