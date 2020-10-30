@@ -5,7 +5,6 @@ import { promisify } from "util"
 import winston from "winston"
 import { exec as origExec } from "child_process"
 import { readFile as origReadFile, unlink as origUnlink } from "fs"
-import loggerMiddleware from "./middleware/logger"
 const exec = promisify(origExec)
 const readFile = promisify(origReadFile)
 const unlink = promisify(origUnlink)
@@ -111,7 +110,7 @@ async function runTests(
   const validations = await getFile("validations.json")
   const exit_code = (await getFile("exit_code.txt")).trim()
 
-  log.info("a", { exit_code })
+  log.info("Result files read", { exit_code })
   console.log(vm_log)
 
   if (status !== "timeout" && exit_code === "0") {

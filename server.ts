@@ -7,18 +7,18 @@ import { promisify } from "util"
 import { exec as origExec } from "child_process"
 const exec = promisify(origExec)
 
-const port = process.env.PORT || 3231
+const port = process.env.PORT || 3232
 
 http
   .createServer(app.callback())
   .listen(port, () => GlobalLogger.info(`Server running on port ${port}.`))
 
 async function pullImage(image: string) {
-  console.log("Pulling " + image)
+  GlobalLogger.info("Pulling " + image)
   try {
     await exec(`docker pull ${image}`)
   } catch (e) {
-    console.error(`Could not pull image ${image}`, e)
+    GlobalLogger.error(`Could not pull image ${image}`, e)
   }
 }
 
@@ -27,11 +27,11 @@ setInterval(async () => {
     await pullImage(image)
   }
 
-  console.log("Getting a list of all alternative images")
+  GlobalLogger.info("Getting a list of all alternative images")
   const res = await Axios.get("https://eu.gcr.io/v2/moocfi-public/tags/list")
   const images = res.data.child
   if (images && images instanceof Array) {
-    for (const image of images.filter(o => o.startsWith("tmc-sandbox-"))) {
+    for (const image of images.filter((o) => o.startsWith("tmc-sandbox-"))) {
       await pullImage(`eu.gcr.io/moocfi-public/${image}`)
     }
   }
