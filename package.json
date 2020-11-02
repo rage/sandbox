@@ -7,7 +7,7 @@
     "start": "node ./dist/server.js",
     "build": "tsc -p tsconfig.json",
     "ts-watch": "tsc --preserveWatchOutput -w -p tsconfig.json",
-    "watch": "sleep 5 && nodemon ./dist/server.js",
+    "watch": "sleep 5 && nodemon --watch dist ./dist/server.js",
     "dev": "npm run build && concurrently npm:ts-watch npm:watch",
     "test": "jest --runInBand --forceExit",
     "migrate": "knex migrate:latest"
