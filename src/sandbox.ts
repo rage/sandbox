@@ -1,10 +1,9 @@
-import * as tar from "tar-fs"
 import { join, resolve } from "path"
-import { createReadStream } from "fs"
 import { promisify } from "util"
 import winston from "winston"
 import { exec as origExec } from "child_process"
 import { readFile as origReadFile, unlink as origUnlink } from "fs"
+import extract, { SupportedMimeTypes } from "./util/file_extractor"
 const exec = promisify(origExec)
 const readFile = promisify(origReadFile)
 const unlink = promisify(origUnlink)
@@ -20,38 +19,36 @@ export interface RunResult {
   exit_code: string
 }
 
-const handleSubmission = (
+const handleSubmission = async (
   path: string,
   id: string,
   dockerImage: string | undefined,
   log: winston.Logger,
+  mimetype: SupportedMimeTypes,
 ): Promise<RunResult> => {
-  return new Promise((resolve, reject) => {
-    log.info("Handling submission")
-    const outputPath = join("work", id)
-    const extractStream = createReadStream(path).pipe(tar.extract(outputPath))
-    extractStream.on("finish", async () => {
-      log.info("Extracted")
-      await exec(`chmod -R 777 ${outputPath}`)
+  log.info("Handling submission")
+  const outputPath = join("work", id)
+  await extract(path, outputPath, mimetype)
+
+  log.info("Extracted")
+  await exec(`chmod -R 777 ${outputPath}`)
+  try {
+    await exec(`chmod -R 777 ${outputPath}`)
+    const results = await runTests(outputPath, id, dockerImage, log)
+    return results
+  } catch (e) {
+    log.error(`Error while running: ${e}`)
+    throw e
+  } finally {
+    setImmediate(async () => {
       try {
-        await exec(`chmod -R 777 ${outputPath}`)
-        const results = await runTests(outputPath, id, dockerImage, log)
-        resolve(results)
+        await unlink(path)
+        //await exec(`rm -rf '${outputPath}'`)
       } catch (e) {
-        log.error(`Error while running: ${e}`)
-        reject(e)
-      } finally {
-        setImmediate(async () => {
-          try {
-            await unlink(path)
-            await exec(`rm -rf '${outputPath}'`)
-          } catch (e) {
-            log.error(`Could not clean up ${id}.`, e)
-          }
-        })
+        log.error(`Could not clean up ${id}.`, e)
       }
     })
-  })
+  }
 }
 
 async function runTests(

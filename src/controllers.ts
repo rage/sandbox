@@ -9,6 +9,7 @@ import gateKeeper, {
 import { BadRequestError } from "./util/error"
 import handleSubmission, { RunResult } from "./sandbox"
 import Axios from "axios"
+import { SupportedMimeTypes } from "./util/file_extractor"
 
 const upload = multer({ dest: "uploads/" })
 export const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next"]
@@ -28,9 +29,14 @@ const api = new Router<CustomState, CustomContext>()
     // concurrent tasks in a middleware because we want to do it before receiving
     // the uploaded file.
 
-    if (ctx.file.mimetype !== "application/x-tar") {
+    if (
+      ctx.file.mimetype !== "application/x-tar" &&
+      ctx.file.mimetype !== "application/zstd"
+    ) {
       freeInstance()
-      throw new BadRequestError("Uploaded file was not a tar!")
+      throw new BadRequestError(
+        `Uploaded file type is not supported! Mimetype was: ${ctx.file.mimetype}}. Supported types are application/x-tar and application/zstd.`,
+      )
     }
 
     const dockerImage: string = ctx.request.body.docker_image
@@ -55,6 +61,7 @@ const api = new Router<CustomState, CustomContext>()
             ctx.requestId,
             dockerImage,
             ctx.log.child({ async: true }),
+            ctx.file.mimetype as SupportedMimeTypes,
           )
         } catch (reason1) {
           ctx.log.error("Handling submission failed.", { reason: reason1 })
