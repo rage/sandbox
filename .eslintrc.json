@@ -1,15 +1,15 @@
 {
   "root": true,
   "parser": "@typescript-eslint/parser",
-  "plugins": [
-    "@typescript-eslint",
-    "security"
-  ],
+  "plugins": ["@typescript-eslint", "security"],
   "extends": [
     "plugin:prettier/recommended",
     "plugin:@typescript-eslint/eslint-recommended",
     "plugin:@typescript-eslint/recommended",
     "plugin:security/recommended"
   ],
-  "ignorePatterns": ["dist"]
+  "ignorePatterns": ["dist"],
+  "rules": {
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+  }
 }

@@ -111,7 +111,9 @@ async function runTests(
   const exit_code = (await getFile("exit_code.txt")).trim()
 
   log.info("Result files read", { exit_code })
-  console.log(vm_log)
+  if (process.env.PRINT_VM_LOG) {
+    console.log(vm_log)
+  }
 
   if (status !== "timeout" && exit_code === "0") {
     status = "finished"

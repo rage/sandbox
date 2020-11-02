@@ -15,14 +15,14 @@ export const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next"]
 const ALLOWED_DOCKER_IMAGE_PREFIX = "eu.gcr.io/moocfi-public/tmc-sandbox-"
 
 const api = new Router<CustomState, CustomContext>()
-  .get("/status.json", async ctx => {
+  .get("/status.json", async (ctx) => {
     ctx.body = {
       busy_instances: getBusyInstances(),
       total_instances: INSTANCES,
     }
   })
 
-  .post("/tasks.json", gateKeeper, upload.single("file"), async ctx => {
+  .post("/tasks.json", gateKeeper, upload.single("file"), async (ctx) => {
     // Gatekeeper has already reserved a processing instance for us.
     // We must remember to free it once we're done. We're limiting the number of
     // concurrent tasks in a middleware because we want to do it before receiving
