@@ -10,6 +10,7 @@
     "watch": "sleep 5 && nodemon --watch dist ./dist/server.js",
     "dev": "npm run build && concurrently npm:ts-watch npm:watch",
     "test": "jest --runInBand --forceExit",
+    "test-debug": "jest --runInBand",
     "migrate": "knex migrate:latest"
   },
   "devDependencies": {

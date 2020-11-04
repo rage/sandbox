@@ -8,6 +8,8 @@ const exec = promisify(origExec)
 const readFile = promisify(origReadFile)
 const unlink = promisify(origUnlink)
 
+const DEFAULT_TASK_TIMEOUT_MS = 60000
+
 export interface RunResult {
   test_output: string
   stdout: string
@@ -43,7 +45,7 @@ const handleSubmission = async (
     setImmediate(async () => {
       try {
         await unlink(path)
-        //await exec(`rm -rf '${outputPath}'`)
+        await exec(`rm -rf '${outputPath}'`)
       } catch (e) {
         log.error(`Could not clean up ${id}.`, e)
       }
@@ -59,12 +61,13 @@ async function runTests(
 ): Promise<RunResult> {
   const id = `sandbox-submission-${submission_id}`
   let status = "failed"
+  const timeout_ms = DEFAULT_TASK_TIMEOUT_MS
 
   const getFile = async (filename: string): Promise<string> => {
     try {
       return await readFile(join(path, filename), "utf8")
     } catch (_) {
-      log.error(`Could not find ${filename}`)
+      log.warn(`Could not find ${filename}`)
       return ""
     }
   }
@@ -72,40 +75,65 @@ async function runTests(
   const image = dockerImage || "nygrenh/sandbox-next"
   const command = `docker create --name '${id}' --network none --memory 1G --cpus 1 --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${resolve(
     path,
-  )},target=/app -it ${image} /app/init`
+  )},target=/app -it '${image}' /app/init`
   log.info(`Creating a container with '${command}'`)
   await exec(command)
   // await exec(`docker cp '${path}/.' '${id}':/app`);
   await exec(`docker cp 'tmc-run' '${id}':/app/tmc-run`)
   await exec(`docker cp 'init' '${id}':/app/init`)
-  ensureStops(id, log)
   let vm_log = ""
 
+  ensureStops(id, log, timeout_ms)
   const executionStartTime = new Date().getTime()
+  let exit_code = ""
 
   try {
     const processLog = await exec(`docker start -i '${id}' | ts -s`)
     vm_log = processLog.stdout + processLog.stderr
     log.info("Ran tests!")
+    exit_code = (await getFile("exit_code.txt")).trim()
+    if (!exit_code || exit_code === "") {
+      // If there is no exit code, tmc-run didn't finish
+      throw new Error("tmc-run did not exit")
+    }
   } catch (e) {
     const executionEndTime = new Date().getTime()
     const durationMs = executionEndTime - executionStartTime
     log.error("Running tests failed", { error: e.message })
-    // TODO: handle OOM
-    if (durationMs > 1000) {
+    // If the process died within the last 5 seconds before timeout, it was
+    // likely a timeout.
+    if (durationMs > timeout_ms - 5000) {
       status = "timeout"
     } else {
       // TODO: is this the right status
       status = "crashed"
     }
   }
+  try {
+    log.info(`Trying to inspect the container`)
+    const inspection = await exec(`docker inspect '${id}'`)
+    const info = JSON.parse(inspection.stdout)
+    const oomKilled = info[0].State.OOMKilled
+    if (oomKilled) {
+      status = "out-of-memory"
+    }
+  } catch (e) {
+    log.error("Could not inspect the container", e)
+  }
 
-  const test_output = await getFile("test_output.txt")
-  const stdout = await getFile("stdout.txt")
-  const stderr = await getFile("stderr.txt")
-  const valgrind = await getFile("valgrind.log")
-  const validations = await getFile("validations.json")
-  const exit_code = (await getFile("exit_code.txt")).trim()
+  const [
+    test_output,
+    stdout,
+    stderr,
+    valgrind,
+    validations,
+  ] = await Promise.all([
+    getFile("test_output.txt"),
+    getFile("stdout.txt"),
+    getFile("stderr.txt"),
+    getFile("valgrind.log"),
+    getFile("validations.json"),
+  ])
 
   log.info("Result files read", { exit_code })
   if (process.env.PRINT_VM_LOG) {
@@ -132,14 +160,14 @@ async function runTests(
   }
 }
 
-function ensureStops(id: string, log: winston.Logger) {
+function ensureStops(id: string, log: winston.Logger, timeout_ms: number) {
   setTimeout(async () => {
     log.info("Making sure process has terminated.")
     try {
       await exec(`docker kill '${id}'`)
       log.info(`Submission ${id} timed out.`)
     } catch (e) {}
-  }, 60000)
+  }, timeout_ms)
 }
 
 export default handleSubmission
