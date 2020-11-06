@@ -2,7 +2,7 @@
 
 ## Development environment
 
-Requirements: Node and docker, tar, zstd
+Requirements: Node and docker, tar, zstd, ts (from moreutils)
 
 ```bash
 npm ci
