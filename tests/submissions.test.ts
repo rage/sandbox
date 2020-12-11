@@ -5,6 +5,18 @@ import createResultServer, { NotifyResult } from "./util/createResultsServer"
 
 let server: Server | null = null
 
+function testSkipOnCi(
+  name: string,
+  fn?: jest.ProvidesCallback,
+  timeout?: number,
+) {
+  if (process.env.CI) {
+    return test.skip(name, fn, timeout)
+  } else {
+    return test(name, fn, timeout)
+  }
+}
+
 beforeAll(() => {
   server = App.listen(0)
 })
@@ -88,7 +100,7 @@ test("POST /tasks.json works with .tar.zst files", async () => {
   expect(testOutput.testResults.length).toBe(1)
 })
 
-test("POST /tasks.json does not crash with fork bombs", async () => {
+testSkipOnCi("POST /tasks.json does not crash with fork bombs", async () => {
   jest.setTimeout(60000)
   const notifyResult: NotifyResult = await new Promise(
     async (resolve, _reject) => {
