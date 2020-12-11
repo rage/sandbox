@@ -51,6 +51,10 @@ const api = new Router<CustomState, CustomContext>()
       throw new BadRequestError("Docker image was not whitelisted.")
     }
 
+    if (ctx.request.body.submission_id) {
+      ctx.log.info(`Handling submission ${ctx.request.body.submission_id}.`)
+    }
+
     // The actual processing is done asynchronously
     setImmediate(async () => {
       try {

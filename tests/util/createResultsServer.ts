@@ -16,7 +16,7 @@ export interface NotifyResult {
 }
 
 const createResultServer = (
-  onResults: (value?: NotifyResult) => void,
+  onResults: (value: NotifyResult) => void,
 ): string => {
   const app = new Koa()
   app.use(bodyParser())
