@@ -73,7 +73,7 @@ async function runTests(
   }
 
   const image = dockerImage || "nygrenh/sandbox-next"
-  const command = `docker create --name '${id}' --network none --memory 1G --kernel-memory=50M --pids-limit=200 --ulimit nproc=10000:10000 --cpus 1 --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${resolve(
+  const command = `docker create --name '${id}' --network none --memory 2G --kernel-memory=50M --pids-limit=200 --ulimit nproc=10000:10000 --cpus 1 --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${resolve(
     path,
   )},target=/app -it '${image}' /app/init`
   log.info(`Creating a container with '${command}'`)
