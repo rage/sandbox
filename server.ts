@@ -39,5 +39,5 @@ setInterval(async () => {
 
 setInterval(() => {
   GlobalLogger.info(`Pruning old images that have not been used for 24 hours.`)
-  exec('docker image prune -a --filter "until=24h"')
+  exec('docker image prune -a -f --filter "until=24h"')
 }, 24 * 60 * 60 * 1000)
