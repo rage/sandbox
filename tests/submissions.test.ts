@@ -165,3 +165,31 @@ test("POST /tasks.json works when submission uses too much memory", async () => 
   expect(notifyResult.token).toBe("SUPER_SECERET")
   expect(notifyResult.status).toBe("out-of-memory")
 })
+
+test("POST /tasks.json works with java", async () => {
+  jest.setTimeout(60000)
+  const notifyResult: NotifyResult = await new Promise(
+    async (resolve, _reject) => {
+      const notifyAddress = createResultServer((res) => {
+        resolve(res)
+      })
+
+      await request(server)
+        .post("/tasks.json")
+        .attach("file", "tests/data/java.tar")
+        .field("docker_image", "eu.gcr.io/moocfi-public/tmc-sandbox-java")
+        .field("token", "SUPER_SECERET")
+        .field("notify", notifyAddress)
+        .set("Accept", "application/json")
+        .expect("Content-Type", /json/)
+        .expect(200)
+    },
+  )
+  expect(notifyResult.token).toBe("SUPER_SECERET")
+  expect(notifyResult.exit_code).toBe("0")
+  expect(notifyResult.status).toBe("finished")
+  expect(notifyResult.vm_log.length).toBeGreaterThan(5)
+  const testOutput = JSON.parse(notifyResult.test_output)
+  expect(testOutput.status).toBe("TESTS_FAILED")
+  expect(testOutput.testResults.length).toBe(2)
+})

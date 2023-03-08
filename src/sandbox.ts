@@ -9,6 +9,8 @@ const readFile = promisify(origReadFile)
 const unlink = promisify(origUnlink)
 
 const DEFAULT_TASK_TIMEOUT_MS = 60000
+const DEBUG = false
+const SUPERDEBUG = false
 
 export interface RunResult {
   test_output: string
@@ -42,14 +44,16 @@ const handleSubmission = async (
     log.error(`Error while running: ${e}`)
     throw e
   } finally {
-    setImmediate(async () => {
-      try {
-        await unlink(path)
-        await exec(`rm -rf '${outputPath}'`)
-      } catch (e) {
-        log.error(`Could not clean up ${id}.`, e)
-      }
-    })
+    if (!DEBUG) {
+      setImmediate(async () => {
+        try {
+          await unlink(path)
+          await exec(`rm -rf '${outputPath}'`)
+        } catch (e) {
+          log.error(`Could not clean up ${id}.`, e)
+        }
+      })
+    }
   }
 }
 
@@ -73,9 +77,16 @@ async function runTests(
   }
 
   const image = dockerImage || "nygrenh/sandbox-next"
-  const command = `docker create --name '${id}' --network none --memory 2G --kernel-memory=50M --pids-limit=200 --ulimit nproc=10000:10000 --cpus 1 --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${resolve(
-    path,
-  )},target=/app -it '${image}' /app/init`
+  let command
+  if (SUPERDEBUG) {
+    command = `docker create --name '${id}' --memory 2G --kernel-memory=50M --pids-limit=200 --ulimit nproc=10000:10000 --cpus 1 --mount type=bind,source=${resolve(
+      path,
+    )},target=/app -it '${image}' /bin/sleep infinity `
+  } else {
+    command = `docker create --name '${id}' --network none --memory 2G --kernel-memory=50M --pids-limit=200 --ulimit nproc=10000:10000 --cpus 1 --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${resolve(
+      path,
+    )},target=/app -it '${image}' /app/init`
+  }
   log.info(`Creating a container with '${command}'`)
   await exec(command)
   // await exec(`docker cp '${path}/.' '${id}':/app`);
@@ -87,6 +98,10 @@ async function runTests(
   const executionStartTime = new Date().getTime()
   let exit_code = ""
 
+  if (DEBUG) {
+    console.log(`docker start '${id}'`)
+    throw new Error("DEBUG mode, aborting")
+  }
   try {
     const processLog = await exec(`docker start -i '${id}' | ts -s`)
     vm_log = processLog.stdout + processLog.stderr

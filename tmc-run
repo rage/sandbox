@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# This gets passed with each submission to tmc-sandbox
+# This tmc-run is not used, the actual tmc-run is copied from the sandbox image in /app/init
 
 # This gets run under 'su', so we want to source profile mostly to get any special PATH.
 # Sourcing seems to terminate the script with -e, even when the return status is 0.
@@ -29,17 +29,16 @@ if [ -f .tmcrc ]; then
   . ./.tmcrc
 fi
 
-if [ -e /tmc-langs.jar ]; then
-  echo "Copying tmc-langs.jar from the image"
-  cp /tmc-langs.jar tmc-langs.jar
+if [ -e /tmc-langs-cli ]; then
+  echo "Copying tmc-langs-cli from the image"
+  cp /tmc-langs-cli tmc-langs-cli
 fi
 
-JAVA_RAM_KB=652700
 echo "Running tests..."
-
-export JVM_OPTIONS="-Xms${JAVA_RAM_KB}K -Xmx${JAVA_RAM_KB}K ${runtime_params[@]}"
-export LC_ALL=C.UTF-8
-java -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -jar tmc-langs.jar run-tests --exercisePath . --outputPath /app/test_output.txt --checkstyleOutputPath /app/validations.json --locale $error_msg_locale > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2) || exit 104
+export RUST_LOG=debug
+export TMC_SANDBOX=true
+export MAVEN_OPTS="-Dtestfx.robot=glass -Dtestfx.headless=true -Dprism.order=sw -Dprism.text=t2k -Djava.awt.headless=true"
+./tmc-langs-cli run-tests --exercise-path . --output-path /app/test_output.txt --checkstyle-output-path /app/validations.json --locale $error_msg_locale > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2) || exit 110
 
 echo "All the files:"
 ls -laR
