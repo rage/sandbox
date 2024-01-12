@@ -6,7 +6,7 @@ import extractResourceLimitsFromRequest, {
 } from "../util/extractResourceLimitsFromRequest"
 
 export const CPU_CORES_IN_SYSTEM = cpus().length
-const TOTAL_SYSTEM_MEMORY_GB = totalmem() / 1024 ** 3
+export const TOTAL_SYSTEM_MEMORY_GB = totalmem() / 1024 ** 3
 
 let reservedCPUCores = 0
 let reservedMemory = 0

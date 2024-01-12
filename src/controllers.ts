@@ -6,6 +6,7 @@ import gateKeeper, {
   getBusyInstances,
   freeInstance,
   getReservedMemory,
+  TOTAL_SYSTEM_MEMORY_GB,
 } from "./middleware/gatekeeper"
 import { BadRequestError } from "./util/error"
 import handleSubmission, { RunResult } from "./sandbox"
@@ -23,8 +24,10 @@ const api = new Router<CustomState, CustomContext>()
       busy_instances: getBusyInstances(),
       // This is intentionally the same as busy instances, this is more descriptive name but we're keeping busy_instances for backwards compatibility
       reserved_cpu_cores: getBusyInstances(),
-      reserved_memory: getReservedMemory(),
+
       total_instances: CPU_CORES_IN_SYSTEM,
+      reserved_memory: getReservedMemory(),
+      total_memory: TOTAL_SYSTEM_MEMORY_GB,
     }
   })
 
