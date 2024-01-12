@@ -11,8 +11,8 @@ export default function extractResourceLimitsFromRequest(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
   requestBody: any,
 ): ResourceLimits {
-  let memoryGB = requestBody.memory_limit_gb ?? 1
-  let cpus = requestBody.cpu_limit ?? 1
+  let memoryGB = Number(requestBody.memory_limit_gb ?? 1)
+  let cpus = Number(requestBody.cpu_limit ?? 1)
   if (memoryGB > MAX_MEMORY_REQUEST_GB) {
     memoryGB = MAX_MEMORY_REQUEST_GB
   }
