@@ -66,6 +66,39 @@ test("POST /tasks.json works", async () => {
   expect(testOutput.testResults.length).toBe(1)
 })
 
+test("POST /tasks.json with higher resource limits works", async () => {
+  jest.setTimeout(60000)
+  const notifyResult: NotifyResult = await new Promise(
+    async (resolve, _reject) => {
+      const notifyAddress = createResultServer((res) => {
+        resolve(res)
+      })
+
+      await request(server)
+        .post("/tasks.json")
+        .attach("file", "tests/data/submission.tar")
+        .field(
+          "docker_image",
+          "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
+        )
+        .field("memory_limit_gb", "3")
+        .field("cpu_limit", "2")
+        .field("token", "SUPER_SECERET")
+        .field("notify", notifyAddress)
+        .set("Accept", "application/json")
+        .expect("Content-Type", /json/)
+        .expect(200)
+    },
+  )
+  expect(notifyResult.token).toBe("SUPER_SECERET")
+  expect(notifyResult.exit_code).toBe("0")
+  expect(notifyResult.status).toBe("finished")
+  expect(notifyResult.vm_log.length).toBeGreaterThan(5)
+  const testOutput = JSON.parse(notifyResult.test_output)
+  expect(testOutput.status).toBe("PASSED")
+  expect(testOutput.testResults.length).toBe(1)
+})
+
 test("POST /tasks.json works with .tar.zst files", async () => {
   jest.setTimeout(60000)
   const notifyResult: NotifyResult = await new Promise(
