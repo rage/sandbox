@@ -7,7 +7,7 @@ import { promisify } from "util"
 import { exec as origExec } from "child_process"
 const exec = promisify(origExec)
 
-const port = process.env.PORT || 3232
+const port = process.env.PORT || 3231
 
 http
   .createServer(app.callback())
