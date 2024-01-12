@@ -9,7 +9,7 @@ const exec = promisify(origExec)
 const readFile = promisify(origReadFile)
 const unlink = promisify(origUnlink)
 
-const DEFAULT_TASK_TIMEOUT_MS = 60000
+const DEFAULT_TASK_TIMEOUT_MS = 180000
 const DEBUG = false
 const SUPERDEBUG = false
 
