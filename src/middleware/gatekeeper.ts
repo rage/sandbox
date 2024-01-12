@@ -4,6 +4,7 @@ import { SandboxBusyError } from "../util/error"
 
 export const INSTANCES = cpus().length
 let busyInstances = 0
+let memoryReserved = 0
 
 export function getBusyInstances(): number {
   return busyInstances
@@ -13,8 +14,9 @@ export function freeInstance(): void {
   busyInstances--
 }
 
-function reserveInstance() {
+function reserveInstance(memory: number) {
   busyInstances++
+  memoryReserved += memory
 }
 
 // Enforces the server is not processing too many submissions at once.
@@ -25,7 +27,11 @@ const gateKeeper = async (
   if (busyInstances >= INSTANCES) {
     throw new SandboxBusyError()
   }
-  reserveInstance()
+  // TODO: Memory amount depends on sandbox (16gb or 32gb)
+  if (memoryReserved + ctx.request.body.memory > 1) {
+    throw new SandboxBusyError()
+  }
+  reserveInstance(ctx.request.body.memory)
   await next()
 }
 

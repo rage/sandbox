@@ -66,6 +66,8 @@ const api = new Router<CustomState, CustomContext>()
             dockerImage,
             ctx.log.child({ async: true }),
             ctx.file.mimetype as SupportedMimeTypes,
+            ctx.request.body.memory || 1,
+            ctx.request.body.cpus || 1,
           )
         } catch (reason1) {
           ctx.log.error("Handling submission failed.", { reason: reason1 })

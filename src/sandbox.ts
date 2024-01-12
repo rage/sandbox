@@ -29,6 +29,8 @@ const handleSubmission = async (
   dockerImage: string | undefined,
   log: winston.Logger,
   mimetype: SupportedMimeTypes,
+  memory = 1,
+  cpus = 1,
 ): Promise<RunResult> => {
   log.info("Handling submission")
   const outputPath = join("work", id)
@@ -38,7 +40,14 @@ const handleSubmission = async (
   await exec(`chmod -R 777 ${outputPath}`)
   try {
     await exec(`chmod -R 777 ${outputPath}`)
-    const results = await runTests(outputPath, id, dockerImage, log)
+    const results = await runTests(
+      outputPath,
+      id,
+      dockerImage,
+      log,
+      memory,
+      cpus,
+    )
     return results
   } catch (e) {
     log.error(`Error while running: ${e}`)
@@ -62,6 +71,8 @@ async function runTests(
   submission_id: string,
   dockerImage: string | undefined,
   log: winston.Logger,
+  memory = 1,
+  cpus = 1,
 ): Promise<RunResult> {
   const id = `sandbox-submission-${submission_id}`
   let status = "failed"
@@ -79,11 +90,11 @@ async function runTests(
   const image = dockerImage || "nygrenh/sandbox-next"
   let command
   if (SUPERDEBUG) {
-    command = `docker create --name '${id}' --memory 2G --kernel-memory=50M --pids-limit=200 --ulimit nproc=10000:10000 --cpus 1 --mount type=bind,source=${resolve(
+    command = `docker create --name '${id}' --memory '${memory}G' --kernel-memory=50M --pids-limit=200 --ulimit nproc=10000:10000 --cpus '${cpus}' --mount type=bind,source=${resolve(
       path,
     )},target=/app -it '${image}' /bin/sleep infinity `
   } else {
-    command = `docker create --name '${id}' --network none --memory 2G --kernel-memory=50M --pids-limit=200 --ulimit nproc=10000:10000 --cpus 1 --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${resolve(
+    command = `docker create --name '${id}' --network none --memory '${memory}G' --kernel-memory=50M --pids-limit=200 --ulimit nproc=10000:10000 --cpus '${cpus}' --cap-drop SETPCAP --cap-drop SETFCAP --cap-drop AUDIT_WRITE --cap-drop SETGID --cap-drop SETUID --cap-drop NET_BIND_SERVICE --cap-drop SYS_CHROOT --cap-drop NET_RAW --mount type=bind,source=${resolve(
       path,
     )},target=/app -it '${image}' /app/init`
   }
