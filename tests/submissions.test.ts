@@ -50,14 +50,47 @@ test("POST /tasks.json works", async () => {
           "docker_image",
           "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
         )
-        .field("token", "SUPER_SECERET")
+        .field("token", "SUPER_SECRET")
         .field("notify", notifyAddress)
         .set("Accept", "application/json")
         .expect("Content-Type", /json/)
         .expect(200)
     },
   )
-  expect(notifyResult.token).toBe("SUPER_SECERET")
+  expect(notifyResult.token).toBe("SUPER_SECRET")
+  expect(notifyResult.exit_code).toBe("0")
+  expect(notifyResult.status).toBe("finished")
+  expect(notifyResult.vm_log.length).toBeGreaterThan(5)
+  const testOutput = JSON.parse(notifyResult.test_output)
+  expect(testOutput.status).toBe("PASSED")
+  expect(testOutput.testResults.length).toBe(1)
+})
+
+test("POST /tasks.json with higher resource limits works", async () => {
+  jest.setTimeout(60000)
+  const notifyResult: NotifyResult = await new Promise(
+    async (resolve, _reject) => {
+      const notifyAddress = createResultServer((res) => {
+        resolve(res)
+      })
+
+      await request(server)
+        .post("/tasks.json")
+        .attach("file", "tests/data/submission.tar")
+        .field(
+          "docker_image",
+          "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
+        )
+        .field("memory_limit_gb", "3")
+        .field("cpu_limit", "2")
+        .field("token", "SUPER_SECRET")
+        .field("notify", notifyAddress)
+        .set("Accept", "application/json")
+        .expect("Content-Type", /json/)
+        .expect(200)
+    },
+  )
+  expect(notifyResult.token).toBe("SUPER_SECRET")
   expect(notifyResult.exit_code).toBe("0")
   expect(notifyResult.status).toBe("finished")
   expect(notifyResult.vm_log.length).toBeGreaterThan(5)
@@ -83,7 +116,7 @@ test("POST /tasks.json works with .tar.zst files", async () => {
           "docker_image",
           "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
         )
-        .field("token", "SUPER_SECERET")
+        .field("token", "SUPER_SECRET")
         .field("notify", notifyAddress)
         .set("Accept", "application/json")
         .expect("Content-Type", /json/)
@@ -91,7 +124,7 @@ test("POST /tasks.json works with .tar.zst files", async () => {
     },
   )
 
-  expect(notifyResult.token).toBe("SUPER_SECERET")
+  expect(notifyResult.token).toBe("SUPER_SECRET")
   expect(notifyResult.exit_code).toBe("0")
   expect(notifyResult.status).toBe("finished")
   expect(notifyResult.vm_log.length).toBeGreaterThan(5)
@@ -117,7 +150,7 @@ testSkipOnCi("POST /tasks.json does not crash with fork bombs", async () => {
           "docker_image",
           "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
         )
-        .field("token", "SUPER_SECERET")
+        .field("token", "SUPER_SECRET")
         .field("notify", notifyAddress)
         .set("Accept", "application/json")
         .expect("Content-Type", /json/)
@@ -125,7 +158,7 @@ testSkipOnCi("POST /tasks.json does not crash with fork bombs", async () => {
     },
   )
 
-  expect(notifyResult.token).toBe("SUPER_SECERET")
+  expect(notifyResult.token).toBe("SUPER_SECRET")
 
   // hard to predict what happens in this case
   const case1 =
@@ -155,14 +188,14 @@ test("POST /tasks.json works when submission uses too much memory", async () => 
           "docker_image",
           "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
         )
-        .field("token", "SUPER_SECERET")
+        .field("token", "SUPER_SECRET")
         .field("notify", notifyAddress)
         .set("Accept", "application/json")
         .expect("Content-Type", /json/)
         .expect(200)
     },
   )
-  expect(notifyResult.token).toBe("SUPER_SECERET")
+  expect(notifyResult.token).toBe("SUPER_SECRET")
   expect(notifyResult.status).toBe("out-of-memory")
 })
 
@@ -178,14 +211,14 @@ test("POST /tasks.json works with java", async () => {
         .post("/tasks.json")
         .attach("file", "tests/data/java.tar")
         .field("docker_image", "eu.gcr.io/moocfi-public/tmc-sandbox-java")
-        .field("token", "SUPER_SECERET")
+        .field("token", "SUPER_SECRET")
         .field("notify", notifyAddress)
         .set("Accept", "application/json")
         .expect("Content-Type", /json/)
         .expect(200)
     },
   )
-  expect(notifyResult.token).toBe("SUPER_SECERET")
+  expect(notifyResult.token).toBe("SUPER_SECRET")
   expect(notifyResult.exit_code).toBe("0")
   expect(notifyResult.status).toBe("finished")
   expect(notifyResult.vm_log.length).toBeGreaterThan(5)
