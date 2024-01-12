@@ -38,10 +38,10 @@ const gateKeeper = async (
   console.info(
     `Sandbox sumbission requesting ${limits.memoryGB}GB of memory and ${limits.cpus} CPUs`,
   )
-  if (reservedCPUCores + limits.cpus >= CPU_CORES_IN_SYSTEM) {
+  if (reservedCPUCores + limits.cpus > CPU_CORES_IN_SYSTEM) {
     throw new SandboxBusyError()
   }
-  if (reservedMemory + limits.memoryGB >= TOTAL_SYSTEM_MEMORY_GB) {
+  if (reservedMemory + limits.memoryGB > TOTAL_SYSTEM_MEMORY_GB) {
     throw new SandboxBusyError()
   }
   reserveInstance(limits)
