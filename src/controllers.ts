@@ -2,14 +2,16 @@ import Router from "koa-router"
 import { CustomContext, CustomState } from "./types"
 import multer from "@koa/multer"
 import gateKeeper, {
-  INSTANCES,
+  CPU_CORES_IN_SYSTEM,
   getBusyInstances,
   freeInstance,
+  getReservedMemory,
 } from "./middleware/gatekeeper"
 import { BadRequestError } from "./util/error"
 import handleSubmission, { RunResult } from "./sandbox"
 import Axios from "axios"
 import { SupportedMimeTypes } from "./util/file_extractor"
+import extractResourceLimitsFromRequest from "./util/extractResourceLimitsFromRequest"
 
 const upload = multer({ dest: "uploads/" })
 export const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = ["nygrenh/sandbox-next"]
@@ -19,7 +21,10 @@ const api = new Router<CustomState, CustomContext>()
   .get("/status.json", async (ctx) => {
     ctx.body = {
       busy_instances: getBusyInstances(),
-      total_instances: INSTANCES,
+      // This is intentionally the same as busy instances, this is more descriptive name but we're keeping busy_instances for backwards compatibility
+      reserved_cpu_cores: getBusyInstances(),
+      reserved_memory: getReservedMemory(),
+      total_instances: CPU_CORES_IN_SYSTEM,
     }
   })
 
@@ -29,11 +34,13 @@ const api = new Router<CustomState, CustomContext>()
     // concurrent tasks in a middleware because we want to do it before receiving
     // the uploaded file.
 
+    const resourceLimits = extractResourceLimitsFromRequest(ctx.request.body)
+
     if (
       ctx.file.mimetype !== "application/x-tar" &&
       ctx.file.mimetype !== "application/zstd"
     ) {
-      freeInstance()
+      freeInstance(resourceLimits)
       throw new BadRequestError(
         `Uploaded file type is not supported! Mimetype was: ${ctx.file.mimetype}}. Supported types are application/x-tar and application/zstd.`,
       )
@@ -47,7 +54,7 @@ const api = new Router<CustomState, CustomContext>()
         ALLOWED_ALTERNATIVE_DOCKER_IMAGES.indexOf(dockerImage) !== -1
       )
     ) {
-      freeInstance()
+      freeInstance(resourceLimits)
       throw new BadRequestError("Docker image was not whitelisted.")
     }
 
@@ -66,14 +73,13 @@ const api = new Router<CustomState, CustomContext>()
             dockerImage,
             ctx.log.child({ async: true }),
             ctx.file.mimetype as SupportedMimeTypes,
-            ctx.request.body.memory || 1,
-            ctx.request.body.cpus || 1,
+            resourceLimits,
           )
         } catch (reason1) {
           ctx.log.error("Handling submission failed.", { reason: reason1 })
           return
         } finally {
-          freeInstance()
+          freeInstance(resourceLimits)
         }
 
         ctx.log.info(`Notifying ${ctx.request.body.notify}...`, {
@@ -91,7 +97,7 @@ const api = new Router<CustomState, CustomContext>()
           exit_code: output.exit_code,
         })
       } catch (reason2) {
-        ctx.log.error("Notifying failed", { error: reason2.message })
+        ctx.log.error("Notifying failed", { error: (reason2 as Error).message })
       }
     })
 
