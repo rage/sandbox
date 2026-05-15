@@ -254,7 +254,7 @@ describe("SandboxExecutor", () => {
       mockExtractFile = vi.fn(
         (_i: string, _o: string, _m: SupportedMimeType): Promise<void> => Promise.resolve(),
       );
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -316,7 +316,7 @@ describe("SandboxExecutor", () => {
           return Promise.resolve({ stdout: "", stderr: "" });
         },
       );
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -368,7 +368,7 @@ describe("SandboxExecutor", () => {
         (path: string, _encoding: BufferEncoding): Promise<string> =>
           Promise.resolve(path.endsWith("exit_code.txt") ? "137" : ""),
       );
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -395,7 +395,7 @@ describe("SandboxExecutor", () => {
           stderr: "",
         },
       });
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 60_000,
         execFileFn: mockExecFile,
@@ -417,12 +417,13 @@ describe("SandboxExecutor", () => {
     it("awaits container cleanup when docker cp fails after docker create", async () => {
       mockExecFile = vi.fn(
         (file: string, args: string[]): Promise<{ stdout: string; stderr: string }> => {
-          if (file === "docker" && args[0] === "cp")
+          if (file === "docker" && args[0] === "cp") {
             return Promise.reject(new Error("docker cp failed"));
+          }
           return Promise.resolve({ stdout: "", stderr: "" });
         },
       );
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -481,7 +482,7 @@ describe("SandboxExecutor", () => {
         (path: string, _encoding: BufferEncoding): Promise<string> =>
           Promise.resolve(path.endsWith("exit_code.txt") ? "1" : ""),
       );
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -505,7 +506,7 @@ describe("SandboxExecutor", () => {
       mockReadFile = vi.fn(
         (_path: string, _encoding: BufferEncoding): Promise<string> => Promise.resolve(""),
       );
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -558,17 +559,19 @@ describe("SandboxExecutor", () => {
     it("does not propagate chmod -R 777 failures (expected on AFS-mounted paths)", async () => {
       const afsExecFile = vi.fn(
         (file: string, args: string[]): Promise<{ stdout: string; stderr: string }> => {
-          if (file === "chmod" && args[0] === "-R")
+          if (file === "chmod" && args[0] === "-R") {
             return Promise.reject(new Error("chmod: not permitted on AFS"));
-          if (file === "docker" && args[0] === "inspect")
+          }
+          if (file === "docker" && args[0] === "inspect") {
             return Promise.resolve({
               stdout: JSON.stringify([{ State: { OOMKilled: false } }]),
               stderr: "",
             });
+          }
           return Promise.resolve({ stdout: "", stderr: "" });
         },
       );
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: afsExecFile,
@@ -591,7 +594,7 @@ describe("SandboxExecutor", () => {
       mockExecFile = makeExecFile({
         "docker inspect": { stdout: "not-valid-json{{", stderr: "" },
       });
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -616,7 +619,7 @@ describe("SandboxExecutor", () => {
 
     it("propagates extraction errors from extractFileFn", async () => {
       mockExtractFile = vi.fn(() => Promise.reject(new Error("archive is corrupt")));
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -652,11 +655,13 @@ describe("SandboxExecutor", () => {
 
     it("logs non-ENOENT errors when reading submission files", async () => {
       mockReadFile = vi.fn((path: string, _encoding: BufferEncoding): Promise<string> => {
-        if (path.endsWith("exit_code.txt")) return Promise.resolve("0");
+        if (path.endsWith("exit_code.txt")) {
+          return Promise.resolve("0");
+        }
         const err = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
         return Promise.reject(err);
       });
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -680,11 +685,13 @@ describe("SandboxExecutor", () => {
 
     it("does not log when submission file is simply missing (ENOENT)", async () => {
       mockReadFile = vi.fn((path: string, _encoding: BufferEncoding): Promise<string> => {
-        if (path.endsWith("exit_code.txt")) return Promise.resolve("0");
+        if (path.endsWith("exit_code.txt")) {
+          return Promise.resolve("0");
+        }
         const err = Object.assign(new Error("ENOENT: no such file"), { code: "ENOENT" });
         return Promise.reject(err);
       });
-      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -754,7 +761,7 @@ describe("SandboxExecutor", () => {
         },
       );
 
-      const executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      const executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 1000,
         execFileFn: mockExecFile,
@@ -804,7 +811,7 @@ describe("SandboxExecutor", () => {
         },
       );
 
-      const executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      const executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
@@ -842,7 +849,7 @@ describe("SandboxExecutor", () => {
         },
       });
 
-      const executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+      const executor = new SandboxExecutor(mockLogger, {
         dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,

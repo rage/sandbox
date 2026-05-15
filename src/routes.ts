@@ -52,8 +52,14 @@ function readDockerRuntimeFromEnv(): DockerRuntime {
   throw new Error(`Invalid DOCKER_RUNTIME value "${runtime}": expected "runc" or "runsc"`);
 }
 
-function setMultipartField(fields: MultipartFields, name: string, value: unknown): void {
-  fields[name] = value === undefined || value === null ? undefined : String(value);
+function multipartFieldValue(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  return JSON.stringify(value);
 }
 
 function numberField(fields: MultipartFields, name: string): number | undefined {
@@ -90,7 +96,11 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
 
       const cleanupUpload = async (): Promise<void> => {
         if (uploadTmpDir) {
-          await rm(uploadTmpDir, { recursive: true, force: true }).catch(() => {});
+          try {
+            await rm(uploadTmpDir, { recursive: true, force: true });
+          } catch {
+            // temp dir may already be gone
+          }
         }
       };
 
@@ -117,7 +127,7 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
             uploadPath = join(uploadTmpDir, `${randomUUID()}.upload`);
             await pipeline(part.file, createWriteStream(uploadPath));
           } else {
-            setMultipartField(fields, part.fieldname, part.value);
+            fields[part.fieldname] = multipartFieldValue(part.value);
           }
         }
       } catch (error) {
@@ -207,69 +217,78 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
 
       const capturedUploadTmpDir = uploadTmpDir;
       const capturedResourceLimits = reservedLimits;
-      setImmediate(async () => {
-        let result: SubmissionResult | undefined;
-        let executionError: unknown;
-        try {
-          result = await exec.executeSubmission(
-            uploadPath,
-            executionId,
-            taskPayload.dockerImage,
-            mimeType,
-            resourceLimits,
-          );
-        } catch (error) {
-          executionError = error;
-          log.error({ error }, "Submission processing failed");
-        } finally {
-          // Release before notifying so the counter is accurate when the callback fires.
-          releaseResources(capturedResourceLimits);
-          // The executor unlinks the upload file; clean up the containing temp dir.
-          await rm(capturedUploadTmpDir, { recursive: true, force: true }).catch(() => {});
-        }
-
-        // Always notify the caller, even on internal failures.
-        const payload = result
-          ? {
-              token,
-              test_output: result.testOutput,
-              stdout: result.stdout,
-              stderr: result.stderr,
-              valgrind: result.valgrind,
-              validations: result.validations,
-              vm_log: result.vmLog,
-              status: result.status,
-              exit_code: result.exitCode,
+      setImmediate(() => {
+        void (async () => {
+          let result: SubmissionResult | undefined;
+          let executionError: unknown;
+          try {
+            result = await exec.executeSubmission(
+              uploadPath,
+              executionId,
+              taskPayload.dockerImage,
+              mimeType,
+              resourceLimits,
+            );
+          } catch (error) {
+            executionError = error;
+            log.error({ error }, "Submission processing failed");
+          } finally {
+            // Release before notifying so the counter is accurate when the callback fires.
+            releaseResources(capturedResourceLimits);
+            // The executor unlinks the upload file; clean up the containing temp dir.
+            try {
+              await rm(capturedUploadTmpDir, { recursive: true, force: true });
+            } catch {
+              // temp dir may already be gone
             }
-          : {
-              token,
-              status: "failed" as const,
-              error:
-                executionError instanceof Error ? executionError.message : String(executionError),
-            };
+          }
 
-        const controller = new AbortController();
-        const fetchTimeout = setTimeout(() => controller.abort(), NOTIFY_TIMEOUT_MS);
-        try {
-          const response = await fetch(notifyUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-            signal: controller.signal,
-            redirect: "manual",
-          });
-          if (response.status >= 300 && response.status < 400) {
-            throw new Error(`Redirects are not allowed for notify URL (HTTP ${response.status})`);
+          // Always notify the caller, even on internal failures.
+          const payload = result
+            ? {
+                token,
+                test_output: result.testOutput,
+                stdout: result.stdout,
+                stderr: result.stderr,
+                valgrind: result.valgrind,
+                validations: result.validations,
+                vm_log: result.vmLog,
+                status: result.status,
+                exit_code: result.exitCode,
+              }
+            : {
+                token,
+                status: "failed" as const,
+                error:
+                  executionError instanceof Error ? executionError.message : String(executionError),
+              };
+
+          const controller = new AbortController();
+          const fetchTimeout = setTimeout(() => controller.abort(), NOTIFY_TIMEOUT_MS);
+          try {
+            const response = await fetch(notifyUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+              signal: controller.signal,
+              redirect: "manual",
+            });
+            if (response.status >= 300 && response.status < 400) {
+              throw new Error(`Redirects are not allowed for notify URL (HTTP ${response.status})`);
+            }
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            log.info(
+              { notifyUrl, status: result?.status ?? "failed" },
+              "Notify callback succeeded",
+            );
+          } catch (error) {
+            log.error({ notifyUrl, error }, "Notify callback failed");
+          } finally {
+            clearTimeout(fetchTimeout);
           }
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-          log.info({ notifyUrl, status: result?.status ?? "failed" }, "Notify callback succeeded");
-        } catch (error) {
-          log.error({ notifyUrl, error }, "Notify callback failed");
-        } finally {
-          clearTimeout(fetchTimeout);
-        }
+        })();
       });
 
       return { message: "ok" };

@@ -9,13 +9,17 @@ import { handleError } from "./utils/errors.js";
 const VALID_LOG_LEVELS = ["trace", "debug", "info", "warn", "error", "fatal", "silent"] as const;
 type LogLevel = (typeof VALID_LOG_LEVELS)[number];
 
+function isLogLevel(s: string): s is LogLevel {
+  return (VALID_LOG_LEVELS as readonly string[]).includes(s);
+}
+
 function resolveLogLevel(): LogLevel {
   const env = process.env["LOG_LEVEL"];
   if (env !== undefined) {
-    if (!VALID_LOG_LEVELS.includes(env as LogLevel)) {
+    if (!isLogLevel(env)) {
       throw new Error(`Invalid LOG_LEVEL "${env}": must be one of ${VALID_LOG_LEVELS.join(", ")}`);
     }
-    return env as LogLevel;
+    return env;
   }
   return process.env["NODE_ENV"] === "production" ? "info" : "debug";
 }

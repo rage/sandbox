@@ -1,6 +1,9 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "vitest"],
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise", "vitest"],
+  "options": {
+    "typeAware": true
+  },
   "categories": {
     "correctness": "error",
     "suspicious": "error",
@@ -8,13 +11,23 @@
   },
   "rules": {
     "no-console":                "error",
-    "eqeqeq":                   "error",
+    "curly":                    ["error", "all"],
+    "eqeqeq":                   ["error", "always"],
     "no-var":                   "error",
     "prefer-const":             "error",
     "no-shadow":                "error",
     "radix":                    "error",
     "require-await":            "error",
     "no-promise-executor-return": "error",
+    "no-implicit-coercion":     "warn",
+    "no-else-return":           "warn",
+    "no-param-reassign":        ["warn", { "props": true }],
+
+    "promise/prefer-await-to-then": ["error", { "strict": true }],
+
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises":  "error",
+    "typescript/await-thenable":       "error",
 
     "typescript/no-explicit-any":          "warn",
     "typescript/consistent-type-imports":  ["warn", { "prefer": "type-imports" }],
@@ -60,9 +73,11 @@
   },
   "overrides": [
     {
-      "files": ["**/*.test.ts"],
+      "files": ["**/*.test.ts", "**/tests/**/*.ts"],
       "rules": {
-        "no-console": "off"
+        "no-console": "off",
+        "typescript/unbound-method": "off",
+        "typescript/no-unsafe-type-assertion": "off"
       }
     }
   ],

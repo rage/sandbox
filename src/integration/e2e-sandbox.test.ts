@@ -155,26 +155,28 @@ beforeAll(async () => {
   const SRC_MAKE_FAIL = "/tmp/tmc-langs-rust/sample_exercises/make/failing-exercise";
   const { readFile: readFileAsync } = await import("node:fs/promises");
   [passingMakeTar, failingMakeTar] = await Promise.all([
-    Promise.all([
-      readFileAsync(join(SRC_MAKE_PASS, "src/source.c"), "utf8"),
-      readFileAsync(join(SRC_MAKE_PASS, "src/main.c"), "utf8"),
-    ]).then(([srcC, mainC]) =>
-      new SubmissionBuilder()
+    (async () => {
+      const [srcC, mainC] = await Promise.all([
+        readFileAsync(join(SRC_MAKE_PASS, "src/source.c"), "utf8"),
+        readFileAsync(join(SRC_MAKE_PASS, "src/main.c"), "utf8"),
+      ]);
+      return new SubmissionBuilder()
         .withMakeTemplate()
         .addFile("src/source.c", srcC)
         .addFile("src/main.c", mainC)
-        .build("tar"),
-    ),
-    Promise.all([
-      readFileAsync(join(SRC_MAKE_FAIL, "src/source.c"), "utf8"),
-      readFileAsync(join(SRC_MAKE_FAIL, "src/main.c"), "utf8"),
-    ]).then(([srcC, mainC]) =>
-      new SubmissionBuilder()
+        .build("tar");
+    })(),
+    (async () => {
+      const [srcC, mainC] = await Promise.all([
+        readFileAsync(join(SRC_MAKE_FAIL, "src/source.c"), "utf8"),
+        readFileAsync(join(SRC_MAKE_FAIL, "src/main.c"), "utf8"),
+      ]);
+      return new SubmissionBuilder()
         .withMakeTemplate()
         .addFile("src/source.c", srcC)
         .addFile("src/main.c", mainC)
-        .build("tar"),
-    ),
+        .build("tar");
+    })(),
   ]);
 
   corruptTar = join(tmpdir(), "corrupt.tar");
@@ -212,11 +214,15 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
     let dockerRuntimeEnvWasConfigured = false;
 
     beforeEach(function (ctx) {
-      if (fixturesSkipAll || skipSuite) ctx.skip();
+      if (fixturesSkipAll || skipSuite) {
+        ctx.skip();
+      }
     });
 
     beforeAll(async () => {
-      if (fixturesSkipAll) return;
+      if (fixturesSkipAll) {
+        return;
+      }
       previousDockerRuntime = process.env["DOCKER_RUNTIME"];
       process.env["DOCKER_RUNTIME"] = runtime;
       dockerRuntimeEnvWasConfigured = true;
@@ -449,9 +455,11 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
         const beforeRes = await app.inject({ method: "GET", url: "/status.json" });
         const before = (JSON.parse(beforeRes.body) as { busy_instances: number }).busy_instances;
 
-        await submitAndWait(corruptTar, PYTHON_IMAGE, { callbackTimeoutMs: 10_000 }).catch(
-          () => {},
-        );
+        try {
+          await submitAndWait(corruptTar, PYTHON_IMAGE, { callbackTimeoutMs: 10_000 });
+        } catch {
+          // ignore — we only care about resource release
+        }
         await new Promise<void>((resolve) => {
           setTimeout(resolve, 2000);
         });
@@ -495,7 +503,7 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
         "fork bomb: status is finished or failed (does not hang)",
         { timeout: 60_000 },
         async (ctx) => {
-          if (process.env.CI) {
+          if (process.env["CI"]) {
             ctx.skip();
           }
           const { result } = await submitAndWait(forkBombPythonTar, PYTHON_IMAGE, {

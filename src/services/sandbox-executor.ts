@@ -27,14 +27,20 @@ export type ExtractFileFn = typeof extractFile;
 /** Error thrown by the default execFile implementation; carries stdout/stderr from the process. */
 class ExecError extends Error {
   override name = "ExecError";
+  readonly code: string | number | null | undefined;
+  readonly stdout: string;
+  readonly stderr: string;
 
   constructor(
     message: string,
-    public readonly code: string | number | null | undefined,
-    public readonly stdout: string,
-    public readonly stderr: string,
+    code: string | number | null | undefined,
+    stdout: string,
+    stderr: string,
   ) {
     super(message);
+    this.code = code;
+    this.stdout = stdout;
+    this.stderr = stderr;
   }
 }
 
@@ -117,16 +123,15 @@ function defaultExecFile(
 }
 
 export class SandboxExecutor {
+  private logger: FastifyBaseLogger;
   private taskTimeoutMs: number;
   private execFileFn: ExecFileFn;
   private readFileFn: ReadFileFn;
   private extractFileFn: ExtractFileFn;
   private dockerRuntime: DockerRuntime;
 
-  constructor(
-    private logger: FastifyBaseLogger,
-    opts: SandboxExecutorOptions,
-  ) {
+  constructor(logger: FastifyBaseLogger, opts: SandboxExecutorOptions) {
+    this.logger = logger;
     this.taskTimeoutMs = opts.taskTimeoutMs ?? DEFAULT_TASK_TIMEOUT_MS;
     this.execFileFn = opts.execFileFn ?? defaultExecFile;
     this.readFileFn = opts.readFileFn ?? readFile;
@@ -219,14 +224,16 @@ export class SandboxExecutor {
     }
 
     let timedOut = false;
-    const timeoutHandle = setTimeout(async () => {
+    const timeoutHandle = setTimeout(() => {
       timedOut = true;
-      try {
-        await this.execFileFn("docker", ["kill", containerId]);
-        log.warn({ containerId }, "Container killed due to timeout");
-      } catch {
-        // Already dead
-      }
+      void (async () => {
+        try {
+          await this.execFileFn("docker", ["kill", containerId]);
+          log.warn({ containerId }, "Container killed due to timeout");
+        } catch {
+          // Already dead
+        }
+      })();
     }, timeoutMs);
 
     let result: SubmissionResult;
@@ -285,8 +292,8 @@ export class SandboxExecutor {
     // Check for OOM
     try {
       const inspection = await this.execFileFn("docker", ["inspect", containerId]);
-      const info = JSON.parse(inspection.stdout) as Array<{ State?: { OOMKilled?: boolean } }>;
-      if (info[0]?.State?.OOMKilled) {
+      const parsed = JSON.parse(inspection.stdout);
+      if (Array.isArray(parsed) && Boolean(parsed[0]?.State?.OOMKilled)) {
         status = "out-of-memory";
         log.warn({ containerId }, "Container killed by OOM");
       }

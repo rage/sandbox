@@ -44,7 +44,9 @@ async function listRegistrySandboxImages(fetchFn: typeof fetch): Promise<string[
 
   const body: unknown = await response.json();
   const child = body && typeof body === "object" ? (body as { child?: unknown }).child : undefined;
-  if (!Array.isArray(child)) return [];
+  if (!Array.isArray(child)) {
+    return [];
+  }
 
   return child
     .filter((image): image is string => typeof image === "string")
@@ -105,22 +107,29 @@ export function startDockerImageMaintenance(
   }
 
   const runPull = (): void => {
-    if (pullRunning) return;
+    if (pullRunning) {
+      return;
+    }
     pullRunning = true;
-    void pullAllowedDockerImages(logger, pullOptions)
-      .catch((error: unknown) => {
+    void (async () => {
+      try {
+        await pullAllowedDockerImages(logger, pullOptions);
+      } catch (error: unknown) {
         logger.error({ error }, "Could not refresh allowed sandbox images");
-      })
-      .finally(() => {
+      } finally {
         pullRunning = false;
-      });
+      }
+    })();
   };
 
   runPull();
 
   const pullInterval = setInterval(runPull, pullIntervalMs);
   const pruneInterval = setInterval(() => {
-    void pruneOldDockerImages(logger, execFileFn).then(runPull);
+    void (async () => {
+      await pruneOldDockerImages(logger, execFileFn);
+      runPull();
+    })();
   }, pruneIntervalMs);
 
   return () => {

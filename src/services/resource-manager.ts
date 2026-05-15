@@ -48,7 +48,9 @@ function reserveResources(limits: ResourceLimits): void {
 // Atomically checks availability and reserves in one synchronous operation,
 // preventing TOCTOU races between concurrent requests.
 export function tryReserveResources(limits: ResourceLimits): boolean {
-  if (!hasAvailableResources(limits)) return false;
+  if (!hasAvailableResources(limits)) {
+    return false;
+  }
   reserveResources(limits);
   return true;
 }
@@ -62,7 +64,9 @@ export function tryResizeReservedResources(
     memoryGB: Math.max(0, nextLimits.memoryGB - currentLimits.memoryGB),
   };
 
-  if (!hasAvailableResources(additionalLimits)) return false;
+  if (!hasAvailableResources(additionalLimits)) {
+    return false;
+  }
 
   // busyInstances count doesn't change on resize — only the resource amounts do.
   reservedCpuCores += nextLimits.cpus - currentLimits.cpus;

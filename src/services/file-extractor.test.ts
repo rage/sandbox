@@ -31,7 +31,9 @@ function buildTarHeader(name: string, size: number): Buffer {
   h[263] = 0x30; // ustar version "0"
   h[264] = 0x30; // ustar version "0"
   let sum = 0;
-  for (let i = 0; i < 512; i++) sum += h[i]!;
+  for (let i = 0; i < 512; i++) {
+    sum += h[i]!;
+  }
   h.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, "ascii"); // checksum
   return h;
 }
@@ -49,7 +51,9 @@ function writeTar(
       if (content.length > 0) {
         out.write(content);
         const pad = (512 - (content.length % 512)) % 512;
-        if (pad > 0) out.write(Buffer.alloc(pad));
+        if (pad > 0) {
+          out.write(Buffer.alloc(pad));
+        }
       }
     }
     out.end(Buffer.alloc(1024)); // end-of-archive: two null 512-byte blocks
@@ -76,7 +80,9 @@ function writeTarWithLargeEntry(outputPath: string, name: string, size: number):
         }
       }
       const pad = (512 - (size % 512)) % 512;
-      if (pad > 0) out.write(Buffer.alloc(pad));
+      if (pad > 0) {
+        out.write(Buffer.alloc(pad));
+      }
       out.end(Buffer.alloc(1024));
     };
     pump();

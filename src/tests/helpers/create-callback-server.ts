@@ -40,7 +40,9 @@ export async function createCallbackServer(timeoutMs = 120_000): Promise<Callbac
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk: unknown) => {
-      if (Buffer.isBuffer(chunk)) chunks.push(chunk);
+      if (Buffer.isBuffer(chunk)) {
+        chunks.push(chunk);
+      }
     });
     req.on("end", () => {
       clearTimeout(timer);

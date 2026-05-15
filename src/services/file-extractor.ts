@@ -45,10 +45,18 @@ const extractTar = async (inputPath: string, outputPath: string): Promise<void> 
 
     const options: tar.ExtractOptions = {
       ignore: (_name: string, header: tar.Headers | undefined) => {
-        if (!header) return true;
-        if (header.type === "symlink" || header.type === "link") return true;
-        if (!isSafePath(header.name)) return true;
-        if (overLimit) return true;
+        if (!header) {
+          return true;
+        }
+        if (header.type === "symlink" || header.type === "link") {
+          return true;
+        }
+        if (!isSafePath(header.name)) {
+          return true;
+        }
+        if (overLimit) {
+          return true;
+        }
 
         entryCount++;
         totalBytes += header.size ?? 0;
@@ -90,7 +98,11 @@ const extractZstd = async (inputPath: string, outputPath: string): Promise<void>
     await execFile("zstd", ["-d", inputPath, "-o", tmpTar, "--force"]);
     await extractTar(tmpTar, outputPath);
   } finally {
-    await unlink(tmpTar).catch(() => {});
+    try {
+      await unlink(tmpTar);
+    } catch {
+      // temp file may already be gone
+    }
   }
 };
 

@@ -15,7 +15,9 @@ const CHECKSUM_PATH = `${BINARY_PATH}.sha256`;
 async function verifyChecksum(binaryPath: string, checksumPath: string): Promise<void> {
   const checksumContent = await readFile(checksumPath, "utf8");
   const expectedHash = checksumContent.trim().split(/\s+/)[0];
-  if (!expectedHash) throw new Error("Checksum file is empty or malformed");
+  if (!expectedHash) {
+    throw new Error("Checksum file is empty or malformed");
+  }
   const { stdout } = await execFile("sha256sum", [binaryPath]);
   const actualHash = stdout.trim().split(/\s+/)[0];
   if (expectedHash !== actualHash) {
@@ -26,7 +28,11 @@ async function verifyChecksum(binaryPath: string, checksumPath: string): Promise
 }
 
 export class TmcLangs {
-  private constructor(private readonly binaryPath: string) {}
+  private readonly binaryPath: string;
+
+  private constructor(binaryPath: string) {
+    this.binaryPath = binaryPath;
+  }
 
   static async setup(): Promise<TmcLangs> {
     const missing = !existsSync(BINARY_PATH) || statSync(BINARY_PATH).size === 0;

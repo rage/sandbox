@@ -2,12 +2,11 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 export class AppError extends Error {
   override name = "AppError";
+  readonly statusCode: number;
 
-  constructor(
-    public readonly statusCode: number,
-    message: string,
-  ) {
+  constructor(statusCode: number, message: string) {
     super(message);
+    this.statusCode = statusCode;
   }
 }
 
