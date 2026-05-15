@@ -141,14 +141,16 @@ export class SandboxExecutor {
     mimetype: SupportedMimeType,
     resourceLimits: ResourceLimits,
   ): Promise<SubmissionResult> {
-    this.logger.info({ submissionId }, "Starting submission execution");
+    const log = this.logger.child({ submissionId });
+    const startTime = Date.now();
+    log.info("Starting submission execution");
 
     const outputPath = join(WORK_DIR, submissionId);
     let result: SubmissionResult;
 
     try {
       await this.extractFileFn(filePath, outputPath, mimetype);
-      this.logger.debug({ submissionId }, "File extraction complete");
+      log.debug("File extraction complete");
 
       try {
         await this.execFileFn("chmod", ["-R", "777", outputPath]);
@@ -156,13 +158,19 @@ export class SandboxExecutor {
         // chmod may fail on AFS-mounted paths; this is expected
       }
 
-      result = await this.runTests(outputPath, submissionId, dockerImage, resourceLimits);
+      result = await this.runTests(outputPath, submissionId, dockerImage, resourceLimits, log);
     } catch (error) {
-      this.logger.error({ submissionId, error }, "Error executing submission");
+      log.error({ error }, "Submission execution failed");
       throw error;
     } finally {
-      await this.cleanupFiles(filePath, outputPath);
+      await this.cleanupFiles(filePath, outputPath, log);
     }
+
+    const durationMs = Date.now() - startTime;
+    log.info(
+      { status: result.status, exitCode: result.exitCode, durationMs },
+      "Submission complete",
+    );
 
     return result;
   }
@@ -172,12 +180,13 @@ export class SandboxExecutor {
     submissionId: string,
     dockerImage: string | undefined,
     resourceLimits: ResourceLimits,
+    log: FastifyBaseLogger,
   ): Promise<SubmissionResult> {
     const containerId = `sandbox-submission-${submissionId}`;
     const image = dockerImage ?? DEFAULT_DOCKER_IMAGE;
     const timeoutMs = this.taskTimeoutMs;
 
-    await this.ensureDockerImageAvailable(image);
+    await this.ensureDockerImageAvailable(image, log);
 
     const dockerArgs = buildDockerCreateArgs(
       containerId,
@@ -187,7 +196,7 @@ export class SandboxExecutor {
       this.dockerRuntime,
     );
 
-    this.logger.debug({ containerId, dockerArgs }, "Creating container");
+    log.debug({ containerId, image }, "Creating container");
     await this.execFileFn("docker", dockerArgs);
 
     // If any setup step fails, clean up the created container before rethrowing.
@@ -205,7 +214,7 @@ export class SandboxExecutor {
       // Make scripts executable inside the bind-mount (chmod +x is masked on AFS; use octal)
       await this.execFileFn("chmod", ["755", join(path, "tmc-run"), join(path, "init")]);
     } catch (error) {
-      await this.cleanupContainer(containerId);
+      await this.cleanupContainer(containerId, log);
       throw error;
     }
 
@@ -214,7 +223,7 @@ export class SandboxExecutor {
       timedOut = true;
       try {
         await this.execFileFn("docker", ["kill", containerId]);
-        this.logger.info({ containerId }, "Container killed due to timeout");
+        log.warn({ containerId }, "Container killed due to timeout");
       } catch {
         // Already dead
       }
@@ -222,21 +231,21 @@ export class SandboxExecutor {
 
     let result: SubmissionResult;
     try {
-      result = await this.collectResults(path, containerId, submissionId, () => timedOut);
+      result = await this.collectResults(path, containerId, submissionId, () => timedOut, log);
     } finally {
       clearTimeout(timeoutHandle);
-      await this.cleanupContainer(containerId);
+      await this.cleanupContainer(containerId, log);
     }
 
     return result;
   }
 
-  private async ensureDockerImageAvailable(image: string): Promise<void> {
+  private async ensureDockerImageAvailable(image: string, log: FastifyBaseLogger): Promise<void> {
     try {
       await this.execFileFn("docker", ["image", "inspect", image]);
       return;
-    } catch (error) {
-      this.logger.info({ image, error }, "Docker image not found locally; pulling");
+    } catch {
+      log.info({ image }, "Docker image not found locally; pulling");
     }
 
     await this.execFileFn("docker", ["pull", image]);
@@ -247,6 +256,7 @@ export class SandboxExecutor {
     containerId: string,
     submissionId: string,
     isTimedOut: () => boolean,
+    log: FastifyBaseLogger,
   ): Promise<SubmissionResult> {
     let status: SubmissionResult["status"] = "failed";
     let exitCode = "";
@@ -255,9 +265,9 @@ export class SandboxExecutor {
     try {
       const processLog = await this.execFileFn("docker", ["start", "-i", containerId]);
       vmLog = processLog.stdout + processLog.stderr;
-      this.logger.debug({ submissionId }, "Container execution complete");
+      log.debug("Container execution complete");
 
-      const rawExitCode = await this.readSubmissionFile(path, "exit_code.txt");
+      const rawExitCode = await this.readSubmissionFile(path, "exit_code.txt", log);
       exitCode = rawExitCode.trim();
       if (!exitCode) {
         throw new Error("tmc-run did not exit properly");
@@ -267,10 +277,7 @@ export class SandboxExecutor {
         vmLog = error.stdout + error.stderr;
       }
 
-      this.logger.error(
-        { submissionId, error, timedOut: isTimedOut() },
-        "Container execution failed",
-      );
+      log.error({ error, timedOut: isTimedOut() }, "Container execution failed");
 
       status = isTimedOut() ? "timeout" : "crashed";
     }
@@ -281,17 +288,18 @@ export class SandboxExecutor {
       const info = JSON.parse(inspection.stdout) as Array<{ State?: { OOMKilled?: boolean } }>;
       if (info[0]?.State?.OOMKilled) {
         status = "out-of-memory";
+        log.warn({ containerId }, "Container killed by OOM");
       }
     } catch {
-      this.logger.warn({ submissionId }, "Could not inspect container");
+      log.warn({ submissionId }, "Could not inspect container for OOM status");
     }
 
     const [testOutput, stdout, stderr, valgrind, validations] = await Promise.all([
-      this.readSubmissionFile(path, "test_output.txt"),
-      this.readSubmissionFile(path, "stdout.txt"),
-      this.readSubmissionFile(path, "stderr.txt"),
-      this.readSubmissionFile(path, "valgrind.log"),
-      this.readSubmissionFile(path, "validations.json"),
+      this.readSubmissionFile(path, "test_output.txt", log),
+      this.readSubmissionFile(path, "stdout.txt", log),
+      this.readSubmissionFile(path, "stderr.txt", log),
+      this.readSubmissionFile(path, "valgrind.log", log),
+      this.readSubmissionFile(path, "validations.json", log),
     ]);
 
     if (status !== "timeout" && status !== "out-of-memory" && exitCode === "0") {
@@ -299,7 +307,7 @@ export class SandboxExecutor {
     }
 
     if (process.env["PRINT_VM_LOG"]) {
-      this.logger.info({ vmLog }, "VM log");
+      log.debug({ vmLog }, "VM log");
     }
 
     return {
@@ -314,27 +322,35 @@ export class SandboxExecutor {
     };
   }
 
-  private async readSubmissionFile(dir: string, filename: string): Promise<string> {
+  private async readSubmissionFile(
+    dir: string,
+    filename: string,
+    log: FastifyBaseLogger,
+  ): Promise<string> {
     try {
       return await this.readFileFn(join(dir, filename), "utf8");
     } catch (error: unknown) {
       if (isNodeError(error) && error.code === "ENOENT") {
         return "";
       }
-      this.logger.error({ error }, `Error reading submission file ${filename}`);
+      log.error({ error, filename }, "Unexpected error reading submission file");
       return "";
     }
   }
 
-  private async cleanupContainer(containerId: string): Promise<void> {
+  private async cleanupContainer(containerId: string, log: FastifyBaseLogger): Promise<void> {
     try {
       await this.execFileFn("docker", ["rm", "--force", containerId]);
     } catch (error) {
-      this.logger.error({ containerId, error }, "Failed to clean up container");
+      log.error({ containerId, error }, "Failed to clean up container");
     }
   }
 
-  private async cleanupFiles(filePath: string, outputPath: string): Promise<void> {
+  private async cleanupFiles(
+    filePath: string,
+    outputPath: string,
+    log: FastifyBaseLogger,
+  ): Promise<void> {
     try {
       await unlink(filePath);
     } catch {
@@ -344,7 +360,7 @@ export class SandboxExecutor {
       // Files owned by the container's uid may remain; that's acceptable.
       await this.execFileFn("rm", ["-rf", resolve(outputPath)]);
     } catch (error) {
-      this.logger.error({ error }, "Failed to clean up work directory");
+      log.error({ error }, "Failed to clean up work directory");
     }
   }
 }

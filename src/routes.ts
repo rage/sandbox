@@ -200,7 +200,10 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
       const executionId = randomUUID();
       const notifyUrl = taskPayload.notify;
       const token = taskPayload.token;
-      const log = request.log.child({});
+      const log = request.log.child({
+        executionId,
+        ...(taskPayload.submissionId ? { submissionId: taskPayload.submissionId } : {}),
+      });
 
       const capturedUploadTmpDir = uploadTmpDir;
       const capturedResourceLimits = reservedLimits;
@@ -261,9 +264,9 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }
-          log.info(`Notified ${notifyUrl} with status ${result?.status ?? "failed"}`);
+          log.info({ notifyUrl, status: result?.status ?? "failed" }, "Notify callback succeeded");
         } catch (error) {
-          log.error({ error }, `Failed to notify ${notifyUrl}`);
+          log.error({ notifyUrl, error }, "Notify callback failed");
         } finally {
           clearTimeout(fetchTimeout);
         }

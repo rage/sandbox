@@ -19,7 +19,7 @@ async function start(): Promise<void> {
     stopDockerImageMaintenance = startDockerImageMaintenance(app.log);
     app.log.info(`Sandbox server running at http://${HOST}:${PORT}`);
   } catch (error) {
-    app.log.error(error);
+    app.log.fatal({ error }, "Server failed to start");
     process.exit(1);
   }
 }

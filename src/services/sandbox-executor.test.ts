@@ -5,11 +5,16 @@ import { SandboxExecutor, buildDockerCreateArgs } from "./sandbox-executor.js";
 import type { ExecFileFn, ExtractFileFn, ReadFileFn } from "./sandbox-executor.js";
 import type { ResourceLimits, SupportedMimeType } from "../types.js";
 
-const mockLogger = {
+const mockLogger: FastifyBaseLogger = {
   info: vi.fn(),
   debug: vi.fn(),
   error: vi.fn(),
   warn: vi.fn(),
+  fatal: vi.fn(),
+  trace: vi.fn(),
+  silent: vi.fn(),
+  level: "info",
+  child: vi.fn(() => mockLogger),
 };
 
 const defaultLimits: ResourceLimits = { memoryGB: 1, cpus: 1 };
@@ -605,7 +610,7 @@ describe("SandboxExecutor", () => {
       expect(result.status).toBe("finished");
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ submissionId: "sub-bad-json" }),
-        "Could not inspect container",
+        "Could not inspect container for OOM status",
       );
     });
 
@@ -668,8 +673,8 @@ describe("SandboxExecutor", () => {
       );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.anything() }),
-        expect.stringContaining("Error reading submission file"),
+        expect.objectContaining({ error: expect.anything(), filename: expect.any(String) }),
+        "Unexpected error reading submission file",
       );
     });
 
