@@ -1,43 +1,20 @@
-import http from "http"
-import { GlobalLogger } from "./src/middleware/logger"
-import app from "./src/app"
-import { ALLOWED_ALTERNATIVE_DOCKER_IMAGES } from "./src/controllers"
-import Axios from "axios"
-import { promisify } from "util"
-import { exec as origExec } from "child_process"
-const exec = promisify(origExec)
+import { buildApp } from "./app.js";
 
-const port = process.env.PORT || 3231
+const PORT = parseInt(process.env["PORT"] ?? "3000", 10);
+if (Number.isNaN(PORT)) {
+  throw new Error(`Invalid PORT value "${process.env["PORT"] ?? ""}": must be a number`);
+}
+const HOST = process.env["HOST"] ?? "0.0.0.0";
 
-http
-  .createServer(app.callback())
-  .listen(port, () => GlobalLogger.info(`Server running on port ${port}.`))
-
-async function pullImage(image: string) {
-  GlobalLogger.info("Pulling " + image)
+async function start(): Promise<void> {
+  const app = await buildApp();
   try {
-    await exec(`docker pull ${image}`)
-  } catch (e) {
-    GlobalLogger.error(`Could not pull image ${image}`, e)
+    await app.listen({ port: PORT, host: HOST });
+    app.log.info(`Sandbox server running at http://${HOST}:${PORT}`);
+  } catch (error) {
+    app.log.error(error);
+    process.exit(1);
   }
 }
 
-setInterval(async () => {
-  for (const image of ALLOWED_ALTERNATIVE_DOCKER_IMAGES) {
-    await pullImage(image)
-  }
-
-  GlobalLogger.info("Getting a list of all alternative images")
-  const res = await Axios.get("https://eu.gcr.io/v2/moocfi-public/tags/list")
-  const images = res.data.child
-  if (images && images instanceof Array) {
-    for (const image of images.filter((o) => o.startsWith("tmc-sandbox-"))) {
-      await pullImage(`eu.gcr.io/moocfi-public/${image}`)
-    }
-  }
-}, 10 * 60 * 1000)
-
-setInterval(() => {
-  GlobalLogger.info(`Pruning old images that have not been used for 24 hours.`)
-  exec('docker image prune -a -f --filter "until=24h"')
-}, 24 * 60 * 60 * 1000)
+start();

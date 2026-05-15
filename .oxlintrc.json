@@ -1,15 +1,73 @@
 {
-  "root": true,
-  "parser": "@typescript-eslint/parser",
-  "plugins": ["@typescript-eslint", "security"],
-  "extends": [
-    "plugin:prettier/recommended",
-    "plugin:@typescript-eslint/eslint-recommended",
-    "plugin:@typescript-eslint/recommended",
-    "plugin:security/recommended"
-  ],
-  "ignorePatterns": ["dist"],
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "warn"
+  },
   "rules": {
-    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+    "no-console":                "error",
+    "eqeqeq":                   "error",
+    "no-var":                   "error",
+    "prefer-const":             "error",
+    "no-shadow":                "error",
+    "radix":                    "error",
+    "require-await":            "error",
+    "no-promise-executor-return": "error",
+
+    "typescript/no-explicit-any":          "warn",
+    "typescript/consistent-type-imports":  ["warn", { "prefer": "type-imports" }],
+    "typescript/no-unused-vars":           "error",
+    "typescript/parameter-properties":     "off",
+    "typescript/array-type":               "off",
+    "typescript/no-inferrable-types":      "off",
+
+    "import/no-duplicates": "error",
+
+    "unicorn/prefer-node-protocol":          "error",
+    "unicorn/catch-error-name":              "error",
+    "unicorn/prefer-optional-catch-binding": "warn",
+    "unicorn/text-encoding-identifier-case": "warn",
+    "unicorn/no-useless-undefined":          "warn",
+    "unicorn/numeric-separators-style":      "warn",
+    "unicorn/no-await-expression-member":    "warn",
+    "unicorn/prefer-ternary":                "warn",
+    "unicorn/prefer-set-has":                "warn",
+    "unicorn/custom-error-definition":       "off",
+    "unicorn/prefer-import-meta-properties": "off",
+    "unicorn/no-null":                       "off",
+
+    "promise/param-names": "error",
+
+    "vitest/prefer-strict-equal":            "warn",
+    "vitest/require-mock-type-parameters":   "off",
+    "vitest/prefer-to-be-falsy":             "off",
+    "vitest/prefer-to-be-truthy":            "off",
+    "vitest/no-conditional-in-test":         "off",
+    "vitest/prefer-spy-on":                  "off",
+    "vitest/no-importing-vitest-globals":    "off",
+    "vitest/prefer-importing-vitest-globals":"off",
+    "vitest/prefer-expect-type-of":          "off",
+    "vitest/prefer-describe-function-title": "off",
+    "vitest/no-hooks":                       "off",
+    "vitest/prefer-expect-assertions":       "off",
+    "vitest/require-hook":                   "off",
+    "vitest/require-top-level-describe":     "off",
+    "vitest/max-expects":                    "off",
+    "vitest/prefer-lowercase-title":         "off",
+    "vitest/prefer-hooks-in-order":          "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ],
+  "env": {
+    "builtin": true,
+    "node": true
   }
 }

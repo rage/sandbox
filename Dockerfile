@@ -1,29 +1,19 @@
-FROM node:11-alpine
+FROM node:22-alpine
 
+RUN apk --no-cache add bash
 
-RUN apk --no-cache add \
-      bash \
-      g++ \
-      ca-certificates \
-      lz4-dev \
-      musl-dev \
-      cyrus-sasl-dev \
-      openssl-dev \
-      make \
-      python
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
-COPY --chown=node package.json package-lock.json /app/
+COPY --chown=node package.json pnpm-lock.yaml /app/
 
 USER node
 WORKDIR /app
-RUN npm ci
+RUN pnpm install --frozen-lockfile --prod
 
 COPY --chown=node . /app
 
-ENV BASE_PATH /v2
+RUN pnpm build
 
-RUN npm run build
+EXPOSE 3000
 
-EXPOSE 3003
-
-CMD [ "npm", "run", "start" ]
+CMD [ "node", "dist/index.js" ]

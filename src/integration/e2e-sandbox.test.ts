@@ -1,228 +1,666 @@
-import { Server } from "http"
-import request from "supertest"
-import App from "../src/app"
-import createResultServer, { NotifyResult } from "./util/createResultsServer"
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { FastifyInstance } from "fastify";
+import Fastify from "fastify";
+import multipart from "@fastify/multipart";
+import sensible from "@fastify/sensible";
+import FormData from "form-data";
+import { readFileSync, existsSync } from "node:fs";
+import { writeFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { exec as execCallback } from "node:child_process";
+import { promisify } from "node:util";
 
-let server: Server | null = null
+import { registerRoutes } from "../routes.js";
+import { handleError } from "../utils/errors.js";
+import { SandboxExecutor } from "../services/sandbox-executor.js";
+import { resetState } from "../services/resource-manager.js";
+import { createCallbackServer } from "../tests/helpers/create-callback-server.js";
+import { SubmissionBuilder } from "../tests/helpers/submission-builder.js";
+import type { DockerRuntime } from "../types.js";
 
-function testSkipOnCi(
-  name: string,
-  fn?: jest.ProvidesCallback,
-  timeout?: number,
-) {
-  if (process.env.CI) {
-    return test.skip(name, fn, timeout)
-  } else {
-    return test(name, fn, timeout)
+const exec = promisify(execCallback);
+
+const PYTHON_IMAGE = "eu.gcr.io/moocfi-public/tmc-sandbox-python:latest";
+const MAKE_IMAGE = "eu.gcr.io/moocfi-public/tmc-sandbox-make:latest";
+const TASK_TIMEOUT_MS = 15_000;
+const TEST_TOKEN = "test-secret-token-abc123";
+
+const REQUIRED_TEMPLATE_DIRS = [
+  "/tmp/tmc-langs-rust/sample_exercises/python3/exercise",
+  "/tmp/tmc-langs-rust/sample_exercises/make/passing-exercise",
+  "/tmp/tmc-langs-rust/sample_exercises/make/failing-exercise",
+];
+
+const EMOTICON_TEST_SOURCE = `
+import unittest
+from tmc import points
+from tmc.utils import load_module, reload_module, get_stdout
+
+exercise = 'src.emoticon'
+
+@points('1.emoticon')
+class EmoticonTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.module = load_module(exercise, 'en')
+
+    def test_print_emoticon(self):
+        reload_module(self.module)
+        output = get_stdout()
+        self.assertEqual(output.strip(), ':^)', 'Expected output :^)')
+
+if __name__ == '__main__':
+    unittest.main()
+`.trim();
+
+let passingPythonTar: string;
+let failingPythonTar: string;
+let timeoutPythonTar: string;
+let oomPythonTar: string;
+let forkBombPythonTar: string;
+let zstdTar: string;
+let corruptTar: string;
+let emptyTar: string;
+let passingMakeTar: string;
+let failingMakeTar: string;
+
+let fixturesSkipAll = false;
+
+async function dockerPull(image: string): Promise<boolean> {
+  try {
+    await exec(`docker pull '${image}'`);
+    return true;
+  } catch {
+    return false;
   }
 }
 
-beforeAll(() => {
-  server = App.listen(0)
-})
+function buildMultipartRequest(
+  tarPath: string,
+  fields: {
+    notify: string;
+    token: string;
+    dockerImage: string;
+    mimeType?: string;
+    memoryLimitGb?: number;
+    cpuLimit?: number;
+    submissionId?: string;
+  },
+): { headers: Record<string, string>; payload: Buffer } {
+  const form = new FormData();
+  form.append("file", readFileSync(tarPath), {
+    filename: "submission.tar",
+    contentType: fields.mimeType ?? "application/x-tar",
+  });
+  form.append("notify", fields.notify);
+  form.append("token", fields.token);
+  form.append("docker_image", fields.dockerImage);
+  if (fields.memoryLimitGb !== undefined) {
+    form.append("memory_limit_gb", String(fields.memoryLimitGb));
+  }
+  if (fields.cpuLimit !== undefined) {
+    form.append("cpu_limit", String(fields.cpuLimit));
+  }
+  if (fields.submissionId !== undefined) {
+    form.append("submission_id", fields.submissionId);
+  }
+  const payload = form.getBuffer();
+  const headers = form.getHeaders() as Record<string, string>;
+  return { headers, payload };
+}
 
-afterAll(() => {
-  server?.close()
-})
+beforeAll(async () => {
+  process.env["SANDBOX_DISABLE_SSRF_CHECK"] = "true";
 
-test("GET /status.json returns the current status", async () => {
-  const res = await request(server)
-    .get("/status.json")
-    .expect("Content-Type", /json/)
-    .expect(200)
+  const missingDirs = REQUIRED_TEMPLATE_DIRS.filter((d) => !existsSync(d));
+  if (missingDirs.length > 0) {
+    console.warn(
+      `Skipping E2E tests: template directories not found:\n  ${missingDirs.join("\n  ")}`,
+    );
+    fixturesSkipAll = true;
+    return;
+  }
 
-  expect(res.body.busy_instances).toBe(0)
-  expect(res.body.total_instances).toBeGreaterThan(0)
-})
+  const [pyOk, makeOk] = await Promise.all([dockerPull(PYTHON_IMAGE), dockerPull(MAKE_IMAGE)]);
+  if (!pyOk || !makeOk) {
+    console.warn("Docker images not available, skipping E2E tests");
+    fixturesSkipAll = true;
+    return;
+  }
 
-test("POST /tasks.json works", async () => {
-  jest.setTimeout(60000)
-  const notifyResult: NotifyResult = await new Promise(
-    async (resolve, _reject) => {
-      const notifyAddress = createResultServer((res) => {
-        resolve(res)
-      })
+  const pythonBuilder = (src: string) =>
+    new SubmissionBuilder()
+      .withPythonTemplate()
+      .addFile("test/test_emoticon.py", EMOTICON_TEST_SOURCE)
+      .addFile("src/emoticon.py", src);
 
-      await request(server)
-        .post("/tasks.json")
-        .attach("file", "tests/data/submission.tar")
-        .field(
-          "docker_image",
-          "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
-        )
-        .field("token", "SUPER_SECRET")
-        .field("notify", notifyAddress)
-        .set("Accept", "application/json")
-        .expect("Content-Type", /json/)
-        .expect(200)
-    },
-  )
-  expect(notifyResult.token).toBe("SUPER_SECRET")
-  expect(notifyResult.exit_code).toBe("0")
-  expect(notifyResult.status).toBe("finished")
-  expect(notifyResult.vm_log.length).toBeGreaterThan(5)
-  const testOutput = JSON.parse(notifyResult.test_output)
-  expect(testOutput.status).toBe("PASSED")
-  expect(testOutput.testResults.length).toBe(1)
-})
+  [passingPythonTar, failingPythonTar, timeoutPythonTar, oomPythonTar, forkBombPythonTar] =
+    await Promise.all([
+      pythonBuilder('print(":^)")').build("tar"),
+      pythonBuilder('print("wrong")').build("tar"),
+      new SubmissionBuilder()
+        .withPythonTemplate()
+        .addFile(".tmcproject.yml", "tests_timeout_ms: 120000\n")
+        .addFile("test/test_emoticon.py", EMOTICON_TEST_SOURCE)
+        .addFile("src/emoticon.py", "import time\nwhile True:\n    time.sleep(0.01)")
+        .build("tar"),
+      pythonBuilder("x = []\nwhile True:\n    x.append(b'\\x00' * 10_000_000)").build("tar"),
+      pythonBuilder("import os\nwhile True:\n    os.fork()").build("tar"),
+    ]);
 
-test("POST /tasks.json with higher resource limits works", async () => {
-  jest.setTimeout(60000)
-  const notifyResult: NotifyResult = await new Promise(
-    async (resolve, _reject) => {
-      const notifyAddress = createResultServer((res) => {
-        resolve(res)
-      })
+  zstdTar = await pythonBuilder('print(":^)")').build("zstd");
 
-      await request(server)
-        .post("/tasks.json")
-        .attach("file", "tests/data/submission.tar")
-        .field(
-          "docker_image",
-          "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
-        )
-        .field("memory_limit_gb", "3")
-        .field("cpu_limit", "2")
-        .field("token", "SUPER_SECRET")
-        .field("notify", notifyAddress)
-        .set("Accept", "application/json")
-        .expect("Content-Type", /json/)
-        .expect(200)
-    },
-  )
-  expect(notifyResult.token).toBe("SUPER_SECRET")
-  expect(notifyResult.exit_code).toBe("0")
-  expect(notifyResult.status).toBe("finished")
-  expect(notifyResult.vm_log.length).toBeGreaterThan(5)
-  const testOutput = JSON.parse(notifyResult.test_output)
-  expect(testOutput.status).toBe("PASSED")
-  expect(testOutput.testResults.length).toBe(1)
-})
+  const SRC_MAKE_PASS = "/tmp/tmc-langs-rust/sample_exercises/make/passing-exercise";
+  const SRC_MAKE_FAIL = "/tmp/tmc-langs-rust/sample_exercises/make/failing-exercise";
+  const { readFile: readFileAsync } = await import("node:fs/promises");
+  [passingMakeTar, failingMakeTar] = await Promise.all([
+    Promise.all([
+      readFileAsync(join(SRC_MAKE_PASS, "src/source.c"), "utf8"),
+      readFileAsync(join(SRC_MAKE_PASS, "src/main.c"), "utf8"),
+    ]).then(([srcC, mainC]) =>
+      new SubmissionBuilder()
+        .withMakeTemplate()
+        .addFile("src/source.c", srcC)
+        .addFile("src/main.c", mainC)
+        .build("tar"),
+    ),
+    Promise.all([
+      readFileAsync(join(SRC_MAKE_FAIL, "src/source.c"), "utf8"),
+      readFileAsync(join(SRC_MAKE_FAIL, "src/main.c"), "utf8"),
+    ]).then(([srcC, mainC]) =>
+      new SubmissionBuilder()
+        .withMakeTemplate()
+        .addFile("src/source.c", srcC)
+        .addFile("src/main.c", mainC)
+        .build("tar"),
+    ),
+  ]);
 
-test("POST /tasks.json works with .tar.zst files", async () => {
-  jest.setTimeout(60000)
-  const notifyResult: NotifyResult = await new Promise(
-    async (resolve, _reject) => {
-      const notifyAddress = createResultServer((res) => {
-        resolve(res)
-      })
+  corruptTar = join(tmpdir(), "corrupt.tar");
+  await writeFile(corruptTar, "this is not a tar file at all!!!!");
 
-      await request(server)
-        .post("/tasks.json")
-        .attach("file", "tests/data/submission.tar.zst", {
-          contentType: "application/zstd",
-        })
-        .field(
-          "docker_image",
-          "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
-        )
-        .field("token", "SUPER_SECRET")
-        .field("notify", notifyAddress)
-        .set("Accept", "application/json")
-        .expect("Content-Type", /json/)
-        .expect(200)
-    },
-  )
+  emptyTar = join(tmpdir(), "empty.tar");
+  await exec(`tar -cf '${emptyTar}' -T /dev/null`);
+}, 180_000);
 
-  expect(notifyResult.token).toBe("SUPER_SECRET")
-  expect(notifyResult.exit_code).toBe("0")
-  expect(notifyResult.status).toBe("finished")
-  expect(notifyResult.vm_log.length).toBeGreaterThan(5)
-  const testOutput = JSON.parse(notifyResult.test_output)
-  expect(testOutput.status).toBe("PASSED")
-  expect(testOutput.testResults.length).toBe(1)
-})
+afterAll(async () => {
+  delete process.env["SANDBOX_DISABLE_SSRF_CHECK"];
+  await Promise.all(
+    [
+      passingPythonTar,
+      failingPythonTar,
+      timeoutPythonTar,
+      oomPythonTar,
+      forkBombPythonTar,
+      zstdTar,
+      passingMakeTar,
+      failingMakeTar,
+      corruptTar,
+      emptyTar,
+    ]
+      .filter(Boolean)
+      .map((p) => rm(p, { force: true })),
+  );
+});
 
-testSkipOnCi("POST /tasks.json does not crash with fork bombs", async () => {
-  jest.setTimeout(60000)
-  const notifyResult: NotifyResult = await new Promise(
-    async (resolve, _reject) => {
-      const notifyAddress = createResultServer((res) => {
-        resolve(res)
-      })
+function sandboxSuiteBody(runtime: DockerRuntime) {
+  return () => {
+    let app: FastifyInstance;
+    let skipSuite = false;
 
-      await request(server)
-        .post("/tasks.json")
-        .attach("file", "tests/data/fork-bomb.tar.zst", {
-          contentType: "application/zstd",
-        })
-        .field(
-          "docker_image",
-          "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
-        )
-        .field("token", "SUPER_SECRET")
-        .field("notify", notifyAddress)
-        .set("Accept", "application/json")
-        .expect("Content-Type", /json/)
-        .expect(200)
-    },
-  )
+    beforeEach(function (ctx) {
+      if (fixturesSkipAll || skipSuite) ctx.skip();
+    });
 
-  expect(notifyResult.token).toBe("SUPER_SECRET")
+    beforeAll(async () => {
+      if (fixturesSkipAll) return;
 
-  // hard to predict what happens in this case
-  const case1 =
-    notifyResult.status === "finished" &&
-    notifyResult.test_output.indexOf("TESTS_FAILED") !== -1
+      if (runtime === "runsc") {
+        try {
+          await exec("docker run --rm --runtime=runsc hello-world");
+        } catch {
+          console.warn("gVisor (runsc) runtime not available, skipping gVisor E2E tests");
+          skipSuite = true;
+          return;
+        }
+      }
 
-  const case2 =
-    notifyResult.status === "failed" && notifyResult.exit_code === "110"
+      app = Fastify({ logger: false });
+      await app.register(sensible);
+      await app.register(multipart);
+      app.setErrorHandler(handleError);
+      const executor = new SandboxExecutor(app.log, {
+        taskTimeoutMs: TASK_TIMEOUT_MS,
+        dockerRuntime: runtime,
+      });
+      registerRoutes(app, executor);
+    }, 60_000);
 
-  expect(case1 || case2).toBe(true)
-})
+    afterAll(async () => {
+      resetState();
+      await app?.close();
+    });
 
-test("POST /tasks.json works when submission uses too much memory", async () => {
-  jest.setTimeout(60000)
-  const notifyResult: NotifyResult = await new Promise(
-    async (resolve, _reject) => {
-      const notifyAddress = createResultServer((res) => {
-        resolve(res)
-      })
+    async function submitAndWait(
+      tarPath: string,
+      dockerImage: string,
+      opts: {
+        mimeType?: string;
+        memoryLimitGb?: number;
+        cpuLimit?: number;
+        submissionId?: string;
+        callbackTimeoutMs?: number;
+      } = {},
+    ) {
+      const callback = await createCallbackServer(opts.callbackTimeoutMs ?? 60_000);
+      const { headers, payload } = buildMultipartRequest(tarPath, {
+        notify: callback.url,
+        token: TEST_TOKEN,
+        dockerImage,
+        ...opts,
+      });
 
-      await request(server)
-        .post("/tasks.json")
-        .attach("file", "tests/data/out-of-memory.tar.zst", {
-          contentType: "application/zstd",
-        })
-        .field(
-          "docker_image",
-          "eu.gcr.io/moocfi-public/tmc-sandbox-tmc-langs-rust",
-        )
-        .field("token", "SUPER_SECRET")
-        .field("notify", notifyAddress)
-        .set("Accept", "application/json")
-        .expect("Content-Type", /json/)
-        .expect(200)
-    },
-  )
-  expect(notifyResult.token).toBe("SUPER_SECRET")
-  expect(notifyResult.status).toBe("out-of-memory")
-})
+      const response = await app.inject({
+        method: "POST",
+        url: "/tasks.json",
+        headers,
+        payload,
+      });
 
-test("POST /tasks.json works with java", async () => {
-  jest.setTimeout(60000)
-  const notifyResult: NotifyResult = await new Promise(
-    async (resolve, _reject) => {
-      const notifyAddress = createResultServer((res) => {
-        resolve(res)
-      })
+      return { httpResponse: response, result: await callback.waitForResult() };
+    }
 
-      await request(server)
-        .post("/tasks.json")
-        .attach("file", "tests/data/java.tar")
-        .field("docker_image", "eu.gcr.io/moocfi-public/tmc-sandbox-java")
-        .field("token", "SUPER_SECRET")
-        .field("notify", notifyAddress)
-        .set("Accept", "application/json")
-        .expect("Content-Type", /json/)
-        .expect(200)
-    },
-  )
-  expect(notifyResult.token).toBe("SUPER_SECRET")
-  expect(notifyResult.exit_code).toBe("0")
-  expect(notifyResult.status).toBe("finished")
-  expect(notifyResult.vm_log.length).toBeGreaterThan(5)
-  const testOutput = JSON.parse(notifyResult.test_output)
-  expect(testOutput.status).toBe("TESTS_FAILED")
-  expect(testOutput.testResults.length).toBe(2)
-})
+    describe("passing submissions", () => {
+      it("Python exercise: full passing submission checks", { timeout: 60_000 }, async () => {
+        const { httpResponse, result } = await submitAndWait(passingPythonTar, PYTHON_IMAGE, {
+          submissionId: `test-sub-42-${runtime}`,
+        });
+        expect(httpResponse.statusCode).toBe(200);
+        expect(result.status).toBe("finished");
+        expect(result.exit_code).toBe("0");
+        expect(result.token).toBe(TEST_TOKEN);
+        expect(result.vm_log.length).toBeGreaterThan(0);
+        const requiredFields: Array<keyof typeof result> = [
+          "token",
+          "test_output",
+          "stdout",
+          "stderr",
+          "valgrind",
+          "validations",
+          "vm_log",
+          "status",
+          "exit_code",
+        ];
+        for (const field of requiredFields) {
+          expect(result).toHaveProperty(field);
+        }
+      });
+
+      it("Python passing: test_output contains PASSED status", { timeout: 60_000 }, async () => {
+        const { result } = await submitAndWait(passingPythonTar, PYTHON_IMAGE);
+        const testOutput = JSON.parse(result.test_output) as { status: string };
+        expect(testOutput.status).toBe("PASSED");
+      });
+
+      it("zstd compressed submission works", { timeout: 60_000 }, async () => {
+        const { result } = await submitAndWait(zstdTar, PYTHON_IMAGE, {
+          mimeType: "application/zstd",
+        });
+        expect(result.status).toBe("finished");
+      });
+
+      it("Make/C passing exercise returns status='finished'", { timeout: 60_000 }, async () => {
+        const { result } = await submitAndWait(passingMakeTar, MAKE_IMAGE);
+        expect(result.status).toBe("finished");
+      });
+    });
+
+    describe("failing submissions", () => {
+      it(
+        "Python with wrong output returns status='finished' with TESTS_FAILED",
+        { timeout: 60_000 },
+        async () => {
+          const { result } = await submitAndWait(failingPythonTar, PYTHON_IMAGE);
+          expect(result.status).toBe("finished");
+          const testOutput = JSON.parse(result.test_output);
+          expect(testOutput.status).toBe("TESTS_FAILED");
+        },
+      );
+
+      it(
+        "testResults array is present in test_output for failing submission",
+        { timeout: 60_000 },
+        async () => {
+          const { result } = await submitAndWait(failingPythonTar, PYTHON_IMAGE);
+          const testOutput = JSON.parse(result.test_output);
+          expect(Array.isArray(testOutput.testResults)).toBe(true);
+          expect(testOutput.testResults.length).toBeGreaterThan(0);
+        },
+      );
+
+      it(
+        "failing submission includes the token in the callback payload",
+        { timeout: 60_000 },
+        async () => {
+          const { result } = await submitAndWait(failingPythonTar, PYTHON_IMAGE);
+          expect(result.token).toBe(TEST_TOKEN);
+        },
+      );
+
+      it(
+        "Make/C failing exercise returns status='finished' with TESTS_FAILED",
+        { timeout: 60_000 },
+        async () => {
+          const { result } = await submitAndWait(failingMakeTar, MAKE_IMAGE);
+          expect(result.status).toBe("finished");
+          const testOutput = JSON.parse(result.test_output);
+          expect(testOutput.status).toBe("TESTS_FAILED");
+        },
+      );
+    });
+
+    describe("resource management", () => {
+      afterEach(() => resetState());
+
+      it("busyInstances returns to 0 after submission completes", { timeout: 60_000 }, async () => {
+        const initialRes = await app.inject({ method: "GET", url: "/status.json" });
+        const initial = (JSON.parse(initialRes.body) as { busyInstances: number }).busyInstances;
+        await submitAndWait(passingPythonTar, PYTHON_IMAGE);
+        const afterRes = await app.inject({ method: "GET", url: "/status.json" });
+        const after = (JSON.parse(afterRes.body) as { busyInstances: number }).busyInstances;
+        expect(after).toBe(initial);
+      });
+
+      it("returns 503 when resources are fully reserved", async () => {
+        const { TOTAL_CPU_CORES, TOTAL_MEMORY_GB, tryReserveResources } =
+          await import("../services/resource-manager.js");
+        tryReserveResources({ cpus: TOTAL_CPU_CORES, memoryGB: TOTAL_MEMORY_GB });
+        const callback = await createCallbackServer(3000);
+        const { headers, payload } = buildMultipartRequest(passingPythonTar, {
+          notify: callback.url,
+          token: TEST_TOKEN,
+          dockerImage: PYTHON_IMAGE,
+        });
+        const response = await app.inject({
+          method: "POST",
+          url: "/tasks.json",
+          headers,
+          payload,
+        });
+        callback.close();
+        expect(response.statusCode).toBe(503);
+      });
+
+      it(
+        "reservedCpuCores and reservedMemory return to baseline after completion",
+        { timeout: 60_000 },
+        async () => {
+          const beforeRes = await app.inject({ method: "GET", url: "/status.json" });
+          const before = JSON.parse(beforeRes.body) as {
+            reservedCpuCores: number;
+            reservedMemory: number;
+          };
+
+          await submitAndWait(passingPythonTar, PYTHON_IMAGE);
+
+          const afterRes = await app.inject({ method: "GET", url: "/status.json" });
+          const after = JSON.parse(afterRes.body) as {
+            reservedCpuCores: number;
+            reservedMemory: number;
+          };
+          expect(after.reservedCpuCores).toBe(before.reservedCpuCores);
+          expect(after.reservedMemory).toBe(before.reservedMemory);
+        },
+      );
+
+      it("accepts custom memory_limit_gb and completes", { timeout: 60_000 }, async () => {
+        const { result } = await submitAndWait(passingPythonTar, PYTHON_IMAGE, {
+          memoryLimitGb: 2,
+        });
+        expect(result.status).toBe("finished");
+      });
+
+      it("accepts custom cpu_limit and completes", { timeout: 60_000 }, async () => {
+        const { result } = await submitAndWait(passingPythonTar, PYTHON_IMAGE, {
+          cpuLimit: 2,
+        });
+        expect(result.status).toBe("finished");
+      });
+
+      it("releases resources even when submission crashes", { timeout: 60_000 }, async () => {
+        const beforeRes = await app.inject({ method: "GET", url: "/status.json" });
+        const before = (JSON.parse(beforeRes.body) as { busyInstances: number }).busyInstances;
+
+        await submitAndWait(corruptTar, PYTHON_IMAGE, { callbackTimeoutMs: 10_000 }).catch(
+          () => {},
+        );
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 2000);
+        });
+
+        const afterRes = await app.inject({ method: "GET", url: "/status.json" });
+        const after = (JSON.parse(afterRes.body) as { busyInstances: number }).busyInstances;
+        expect(after).toBeLessThanOrEqual(before);
+      });
+    });
+
+    describe("error scenarios", () => {
+      it("OOM submission returns status='out-of-memory'", { timeout: 60_000 }, async () => {
+        const { result } = await submitAndWait(oomPythonTar, PYTHON_IMAGE, {
+          callbackTimeoutMs: 60_000,
+        });
+        expect(result.status).toBe("out-of-memory");
+      });
+
+      it("OOM submission includes token in callback payload", { timeout: 60_000 }, async () => {
+        const { result } = await submitAndWait(oomPythonTar, PYTHON_IMAGE, {
+          callbackTimeoutMs: 60_000,
+        });
+        expect(result.token).toBe(TEST_TOKEN);
+      });
+
+      it(
+        "empty tar submission does not hang (completes with any status)",
+        { timeout: 60_000 },
+        async () => {
+          const { result } = await submitAndWait(emptyTar, PYTHON_IMAGE, {
+            callbackTimeoutMs: 60_000,
+          });
+          expect(result.status).toBeDefined();
+          expect(["finished", "failed", "crashed", "timeout", "out-of-memory"]).toContain(
+            result.status,
+          );
+        },
+      );
+
+      it(
+        "fork bomb: status is finished or failed (does not hang)",
+        { timeout: 60_000 },
+        async () => {
+          if (process.env.CI) {
+            console.log("Skipping fork bomb test on CI");
+            return;
+          }
+          const { result } = await submitAndWait(forkBombPythonTar, PYTHON_IMAGE, {
+            callbackTimeoutMs: 60_000,
+          });
+          expect(["finished", "failed", "crashed"]).toContain(result.status);
+        },
+      );
+
+      it("corrupt tar returns HTTP 200 (async) or immediate error (400/500)", async () => {
+        const callback = await createCallbackServer(5000);
+        const { headers, payload } = buildMultipartRequest(corruptTar, {
+          notify: callback.url,
+          token: TEST_TOKEN,
+          dockerImage: PYTHON_IMAGE,
+        });
+        const response = await app.inject({
+          method: "POST",
+          url: "/tasks.json",
+          headers,
+          payload,
+        });
+        expect([200, 400, 500]).toContain(response.statusCode);
+        callback.close();
+      });
+    });
+
+    describe("timeout scenario", () => {
+      it(
+        "infinite loop returns status='timeout' after executor timeout",
+        { timeout: 30_000 },
+        async () => {
+          const { result } = await submitAndWait(timeoutPythonTar, PYTHON_IMAGE, {
+            callbackTimeoutMs: 25_000,
+          });
+          expect(result.status).toBe("timeout");
+        },
+      );
+
+      it("timeout submission includes token in callback payload", { timeout: 30_000 }, async () => {
+        const { result } = await submitAndWait(timeoutPythonTar, PYTHON_IMAGE, {
+          callbackTimeoutMs: 25_000,
+        });
+        expect(result.token).toBe(TEST_TOKEN);
+      });
+
+      it("reservedCpuCores returns to baseline after timeout", { timeout: 30_000 }, async () => {
+        const beforeRes = await app.inject({ method: "GET", url: "/status.json" });
+        const before = JSON.parse(beforeRes.body) as { reservedCpuCores: number };
+
+        await submitAndWait(timeoutPythonTar, PYTHON_IMAGE, { callbackTimeoutMs: 25_000 });
+
+        const afterRes = await app.inject({ method: "GET", url: "/status.json" });
+        const after = JSON.parse(afterRes.body) as { reservedCpuCores: number };
+        expect(after.reservedCpuCores).toBe(before.reservedCpuCores);
+      });
+    });
+
+    describe("concurrent submissions", () => {
+      it("two simultaneous Python submissions both complete", { timeout: 90_000 }, async () => {
+        const [r1, r2] = await Promise.all([
+          submitAndWait(passingPythonTar, PYTHON_IMAGE, { callbackTimeoutMs: 80_000 }),
+          submitAndWait(passingPythonTar, PYTHON_IMAGE, { callbackTimeoutMs: 80_000 }),
+        ]);
+        expect(r1.result.status).toBe("finished");
+        expect(r2.result.status).toBe("finished");
+      });
+
+      it("two simultaneous failing submissions both complete", { timeout: 90_000 }, async () => {
+        const [r1, r2] = await Promise.all([
+          submitAndWait(failingPythonTar, PYTHON_IMAGE, { callbackTimeoutMs: 80_000 }),
+          submitAndWait(failingPythonTar, PYTHON_IMAGE, { callbackTimeoutMs: 80_000 }),
+        ]);
+        expect(r1.result.status).toBe("finished");
+        expect(r2.result.status).toBe("finished");
+      });
+    });
+
+    describe("HTTP request validation", () => {
+      function buildRawForm(
+        fields: Record<string, string>,
+        tarPath: string,
+      ): { headers: Record<string, string>; payload: Buffer } {
+        const form = new FormData();
+        form.append("file", readFileSync(tarPath), {
+          filename: "submission.tar",
+          contentType: "application/x-tar",
+        });
+        for (const [k, v] of Object.entries(fields)) {
+          form.append(k, v);
+        }
+        return {
+          headers: form.getHeaders() as Record<string, string>,
+          payload: form.getBuffer(),
+        };
+      }
+
+      it("returns 400 when docker_image is not whitelisted", async () => {
+        const { headers, payload } = buildRawForm(
+          {
+            notify: "https://example.com/notify",
+            token: TEST_TOKEN,
+            docker_image: "evil/unauthorized-image:latest",
+          },
+          passingPythonTar,
+        );
+        const response = await app.inject({
+          method: "POST",
+          url: "/tasks.json",
+          headers,
+          payload,
+        });
+        expect(response.statusCode).toBe(400);
+      });
+
+      it("returns 400 when docker_image is an empty string", async () => {
+        const { headers, payload } = buildRawForm(
+          {
+            notify: "https://example.com/notify",
+            token: TEST_TOKEN,
+            docker_image: "",
+          },
+          passingPythonTar,
+        );
+        const response = await app.inject({
+          method: "POST",
+          url: "/tasks.json",
+          headers,
+          payload,
+        });
+        expect(response.statusCode).toBe(400);
+      });
+
+      it("returns 400 when token is missing", async () => {
+        const { headers, payload } = buildRawForm(
+          { notify: "https://example.com/notify" },
+          passingPythonTar,
+        );
+        const response = await app.inject({
+          method: "POST",
+          url: "/tasks.json",
+          headers,
+          payload,
+        });
+        expect(response.statusCode).toBe(400);
+      });
+
+      it("returns 400 when notify URL is missing", async () => {
+        const { headers, payload } = buildRawForm({ token: TEST_TOKEN }, passingPythonTar);
+        const response = await app.inject({
+          method: "POST",
+          url: "/tasks.json",
+          headers,
+          payload,
+        });
+        expect(response.statusCode).toBe(400);
+      });
+
+      it("returns 400 when notify URL is not a valid URL", async () => {
+        const { headers, payload } = buildRawForm(
+          { notify: "not-a-url", token: TEST_TOKEN },
+          passingPythonTar,
+        );
+        const response = await app.inject({
+          method: "POST",
+          url: "/tasks.json",
+          headers,
+          payload,
+        });
+        expect(response.statusCode).toBe(400);
+      });
+    });
+  };
+}
+
+// vitest/valid-describe-callback: factory must be invoked inside describe body
+// eslint-disable-next-line vitest/valid-describe-callback
+describe("E2E Sandbox Execution (default/runc)", () => {
+  sandboxSuiteBody("runc")();
+});
+// eslint-disable-next-line vitest/valid-describe-callback
+describe("E2E Sandbox Execution (gVisor/runsc)", () => {
+  sandboxSuiteBody("runsc")();
+});

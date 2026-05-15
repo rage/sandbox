@@ -1,23 +1,21 @@
-import Koa from "koa"
-import bodyParser from "koa-bodyparser"
-import api from "./controllers"
-import logger from "./middleware/logger"
-import errorHandler from "./middleware/error_handler"
-import { CustomContext, CustomState } from "./types"
-import cors from "@koa/cors"
+import Fastify from "fastify";
+import type { FastifyInstance } from "fastify";
+import multipart from "@fastify/multipart";
+import sensible from "@fastify/sensible";
+import { registerRoutes } from "./routes.js";
+import { handleError } from "./utils/errors.js";
 
-const app = new Koa<CustomState, CustomContext>()
+export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: opts.logger ?? true,
+  });
 
-app.use(cors())
+  await app.register(sensible);
+  await app.register(multipart);
 
-app.use(errorHandler)
+  app.setErrorHandler(handleError);
 
-app.use(logger)
+  registerRoutes(app);
 
-app.use(bodyParser())
-
-app.use(api.routes())
-
-export type AppContext = typeof app.context
-
-export default app
+  return app;
+}

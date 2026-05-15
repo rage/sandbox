@@ -1,5 +1,7 @@
-node_modules
-dist
-uploads
-work
-.eslintcache
+node_modules/
+dist/
+.DS_Store
+*.log
+.env
+.env.local
+coverage/

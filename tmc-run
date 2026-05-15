@@ -38,7 +38,7 @@ echo "Running tests..."
 export RUST_LOG=debug
 export TMC_SANDBOX=true
 export MAVEN_OPTS="-Dtestfx.robot=glass -Dtestfx.headless=true -Dprism.order=sw -Dprism.text=t2k -Djava.awt.headless=true"
-./tmc-langs-cli run-tests --exercise-path . --output-path /app/test_output.txt --checkstyle-output-path /app/validations.json --locale $error_msg_locale > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2) || exit 110
+./tmc-langs-cli run-tests --exercise-path . --output-path /app/test_output.txt --checkstyle-output-path /app/validations.json --locale "$error_msg_locale" > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2) || exit 110
 
 echo "All the files:"
 ls -laR
