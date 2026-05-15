@@ -250,6 +250,7 @@ describe("SandboxExecutor", () => {
         (_i: string, _o: string, _m: SupportedMimeType): Promise<void> => Promise.resolve(),
       );
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -279,6 +280,65 @@ describe("SandboxExecutor", () => {
       expect(startIdx, "docker start not found").toBeGreaterThan(cpIdx);
     });
 
+    it("does not pull the docker image when it is already present", async () => {
+      await executor.executeSubmission(
+        "/fake/upload.tar",
+        "sub-image-present",
+        undefined,
+        "application/x-tar",
+        defaultLimits,
+      );
+
+      const calls = mockExecFile.mock.calls as Array<[string, string[]]>;
+      expect(calls.some(([f, a]) => f === "docker" && a[0] === "image" && a[1] === "inspect")).toBe(
+        true,
+      );
+      expect(calls.some(([f, a]) => f === "docker" && a[0] === "pull")).toBe(false);
+    });
+
+    it("pulls the docker image only when it is missing locally", async () => {
+      mockExecFile = vi.fn(
+        (file: string, args: string[]): Promise<{ stdout: string; stderr: string }> => {
+          if (file === "docker" && args[0] === "image" && args[1] === "inspect") {
+            return Promise.reject(new Error("No such image"));
+          }
+          if (file === "docker" && args[0] === "inspect") {
+            return Promise.resolve({
+              stdout: JSON.stringify([{ State: { OOMKilled: false } }]),
+              stderr: "",
+            });
+          }
+          return Promise.resolve({ stdout: "", stderr: "" });
+        },
+      );
+      executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
+        taskTimeoutMs: 5000,
+        execFileFn: mockExecFile,
+        readFileFn: mockReadFile,
+        extractFileFn: mockExtractFile,
+      });
+
+      await executor.executeSubmission(
+        "/fake/upload.tar",
+        "sub-missing-image",
+        "eu.gcr.io/moocfi-public/tmc-sandbox-python:latest",
+        "application/x-tar",
+        defaultLimits,
+      );
+
+      const calls = mockExecFile.mock.calls as Array<[string, string[]]>;
+      const inspectIdx = calls.findIndex(
+        ([f, a]) => f === "docker" && a[0] === "image" && a[1] === "inspect",
+      );
+      const pullIdx = calls.findIndex(([f, a]) => f === "docker" && a[0] === "pull");
+      const createIdx = calls.findIndex(([f, a]) => f === "docker" && a[0] === "create");
+
+      expect(inspectIdx).toBeGreaterThanOrEqual(0);
+      expect(pullIdx).toBeGreaterThan(inspectIdx);
+      expect(createIdx).toBeGreaterThan(pullIdx);
+    });
+
     it("returns status=finished when exit_code is 0 and no OOM", async () => {
       const result = await executor.executeSubmission(
         "/fake/upload.tar",
@@ -304,6 +364,7 @@ describe("SandboxExecutor", () => {
           Promise.resolve(path.endsWith("exit_code.txt") ? "137" : ""),
       );
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -330,6 +391,7 @@ describe("SandboxExecutor", () => {
         },
       });
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 60_000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -356,6 +418,7 @@ describe("SandboxExecutor", () => {
         },
       );
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -414,6 +477,7 @@ describe("SandboxExecutor", () => {
           Promise.resolve(path.endsWith("exit_code.txt") ? "1" : ""),
       );
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -437,6 +501,7 @@ describe("SandboxExecutor", () => {
         (_path: string, _encoding: BufferEncoding): Promise<string> => Promise.resolve(""),
       );
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -499,6 +564,7 @@ describe("SandboxExecutor", () => {
         },
       );
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: afsExecFile,
         readFileFn: mockReadFile,
@@ -521,6 +587,7 @@ describe("SandboxExecutor", () => {
         "docker inspect": { stdout: "not-valid-json{{", stderr: "" },
       });
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -545,6 +612,7 @@ describe("SandboxExecutor", () => {
     it("propagates extraction errors from extractFileFn", async () => {
       mockExtractFile = vi.fn(() => Promise.reject(new Error("archive is corrupt")));
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -584,6 +652,7 @@ describe("SandboxExecutor", () => {
         return Promise.reject(err);
       });
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -611,6 +680,7 @@ describe("SandboxExecutor", () => {
         return Promise.reject(err);
       });
       executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -680,6 +750,7 @@ describe("SandboxExecutor", () => {
       );
 
       const executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 1000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -729,6 +800,7 @@ describe("SandboxExecutor", () => {
       );
 
       const executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -766,6 +838,7 @@ describe("SandboxExecutor", () => {
       });
 
       const executor = new SandboxExecutor(mockLogger as unknown as FastifyBaseLogger, {
+        dockerRuntime: "runc",
         taskTimeoutMs: 5000,
         execFileFn: mockExecFile,
         readFileFn: mockReadFile,
@@ -865,7 +938,7 @@ describe("buildDockerCreateArgs gVisor (runsc) docker args", () => {
     expect(runtimeIdx).toBeLessThan(imageIdx);
   });
 
-  it("defaults to runc when no dockerRuntime option is provided", () => {
+  it("omits runsc-only flags when dockerRuntime is runc", () => {
     const args = buildDockerCreateArgs("test", "/path", "image", { memoryGB: 1, cpus: 1 }, "runc");
     expect(args.indexOf("--runtime")).toBe(-1);
     expect(args.some((a) => a.startsWith("--kernel-memory"))).toBe(true);

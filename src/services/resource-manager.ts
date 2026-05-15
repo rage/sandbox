@@ -53,6 +53,23 @@ export function tryReserveResources(limits: ResourceLimits): boolean {
   return true;
 }
 
+export function tryResizeReservedResources(
+  currentLimits: ResourceLimits,
+  nextLimits: ResourceLimits,
+): boolean {
+  const additionalLimits: ResourceLimits = {
+    cpus: Math.max(0, nextLimits.cpus - currentLimits.cpus),
+    memoryGB: Math.max(0, nextLimits.memoryGB - currentLimits.memoryGB),
+  };
+
+  if (!hasAvailableResources(additionalLimits)) return false;
+
+  // busyInstances count doesn't change on resize — only the resource amounts do.
+  reservedCpuCores += nextLimits.cpus - currentLimits.cpus;
+  reservedMemoryGb += nextLimits.memoryGB - currentLimits.memoryGB;
+  return true;
+}
+
 export function getResourceUtilization(): { cpuUtilization: number; memoryUtilization: number } {
   return {
     cpuUtilization: reservedCpuCores / TOTAL_CPU_CORES,

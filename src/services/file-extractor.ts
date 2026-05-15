@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { unlink } from "node:fs/promises";
+import { mkdir, unlink } from "node:fs/promises";
 import { execFile as execFileCallback } from "node:child_process";
 import { resolve, sep } from "node:path";
 import * as tar from "tar-fs";
@@ -36,8 +36,9 @@ function isSafePath(entryPath: string): boolean {
   return resolved === SAFE_PATH_ROOT || resolved.startsWith(SAFE_PATH_ROOT + sep);
 }
 
-const extractTar = (inputPath: string, outputPath: string): Promise<void> =>
-  new Promise((_resolve, reject) => {
+const extractTar = async (inputPath: string, outputPath: string): Promise<void> => {
+  await mkdir(outputPath, { recursive: true });
+  return new Promise((_resolve, reject) => {
     let entryCount = 0;
     let totalBytes = 0;
     let overLimit = false;
@@ -81,6 +82,7 @@ const extractTar = (inputPath: string, outputPath: string): Promise<void> =>
     });
     extractStream.on("error", (err) => reject(overLimit ? limitError() : err));
   });
+};
 
 const extractZstd = async (inputPath: string, outputPath: string): Promise<void> => {
   const tmpTar = `${inputPath}.decompressed.tar`;

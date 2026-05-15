@@ -43,11 +43,11 @@ function isNodeError(e: unknown): e is NodeJS.ErrnoException {
 }
 
 export interface SandboxExecutorOptions {
+  dockerRuntime: DockerRuntime;
   taskTimeoutMs?: number;
   execFileFn?: ExecFileFn;
   readFileFn?: ReadFileFn;
   extractFileFn?: ExtractFileFn;
-  dockerRuntime?: DockerRuntime;
 }
 
 export function buildDockerCreateArgs(
@@ -69,7 +69,8 @@ export function buildDockerCreateArgs(
     "PYTHONDONTWRITEBYTECODE=1",
     "--memory",
     `${resourceLimits.memoryGB}G`,
-    // --kernel-memory is unsupported by gVisor (runsc)
+    // --kernel-memory is unsupported by gVisor (runsc) and deprecated in Docker 20.10+
+    // (no-op on cgroups v2); kept for cgroups v1 compatibility.
     ...(dockerRuntime === "runc" ? ["--kernel-memory=50M"] : []),
     "--pids-limit=200",
     "--ulimit",
@@ -124,13 +125,13 @@ export class SandboxExecutor {
 
   constructor(
     private logger: FastifyBaseLogger,
-    opts: SandboxExecutorOptions = {},
+    opts: SandboxExecutorOptions,
   ) {
     this.taskTimeoutMs = opts.taskTimeoutMs ?? DEFAULT_TASK_TIMEOUT_MS;
     this.execFileFn = opts.execFileFn ?? defaultExecFile;
     this.readFileFn = opts.readFileFn ?? readFile;
     this.extractFileFn = opts.extractFileFn ?? extractFile;
-    this.dockerRuntime = opts.dockerRuntime ?? "runc";
+    this.dockerRuntime = opts.dockerRuntime;
   }
 
   async executeSubmission(
@@ -175,6 +176,8 @@ export class SandboxExecutor {
     const containerId = `sandbox-submission-${submissionId}`;
     const image = dockerImage ?? DEFAULT_DOCKER_IMAGE;
     const timeoutMs = this.taskTimeoutMs;
+
+    await this.ensureDockerImageAvailable(image);
 
     const dockerArgs = buildDockerCreateArgs(
       containerId,
@@ -226,6 +229,17 @@ export class SandboxExecutor {
     }
 
     return result;
+  }
+
+  private async ensureDockerImageAvailable(image: string): Promise<void> {
+    try {
+      await this.execFileFn("docker", ["image", "inspect", image]);
+      return;
+    } catch (error) {
+      this.logger.info({ image, error }, "Docker image not found locally; pulling");
+    }
+
+    await this.execFileFn("docker", ["pull", image]);
   }
 
   private async collectResults(

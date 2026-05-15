@@ -10,6 +10,7 @@ export interface NotifyResult {
   vm_log: string;
   status: "finished" | "timeout" | "out-of-memory" | "crashed" | "failed";
   exit_code: string;
+  error?: string;
 }
 
 export interface CallbackServer {

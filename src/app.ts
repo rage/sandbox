@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import sensible from "@fastify/sensible";
 import { registerRoutes } from "./routes.js";
@@ -11,6 +12,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   });
 
   await app.register(sensible);
+  await app.register(cors);
   await app.register(multipart);
 
   app.setErrorHandler(handleError);

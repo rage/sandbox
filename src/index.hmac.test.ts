@@ -12,6 +12,7 @@ import * as resourceManager from "./services/resource-manager.js";
 
 describe("POST /tasks.json HMAC enforcement", () => {
   let hmacApp: FastifyInstance;
+  let previousDockerRuntime: string | undefined;
   const HMAC_SECRET = "test-hmac-secret-xyz";
 
   function makeForm(opts: { notifySignature?: string } = {}): FormData {
@@ -31,12 +32,15 @@ describe("POST /tasks.json HMAC enforcement", () => {
   beforeAll(async () => {
     process.env["SANDBOX_CALLBACK_SECRET"] = HMAC_SECRET;
     process.env["SANDBOX_DISABLE_SSRF_CHECK"] = "true";
+    previousDockerRuntime = process.env["DOCKER_RUNTIME"];
+    process.env["DOCKER_RUNTIME"] = "runc";
 
     hmacApp = Fastify({ logger: false });
     await hmacApp.register(sensible);
     await hmacApp.register(multipart);
     hmacApp.setErrorHandler(handleError);
     const mockExecutor = new SandboxExecutor(hmacApp.log, {
+      dockerRuntime: "runc",
       execFileFn: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
       extractFileFn: vi.fn().mockImplementation(() => Promise.resolve()),
       readFileFn: vi.fn().mockResolvedValue(""),
@@ -47,6 +51,11 @@ describe("POST /tasks.json HMAC enforcement", () => {
   afterAll(async () => {
     delete process.env["SANDBOX_CALLBACK_SECRET"];
     delete process.env["SANDBOX_DISABLE_SSRF_CHECK"];
+    if (previousDockerRuntime === undefined) {
+      delete process.env["DOCKER_RUNTIME"];
+    } else {
+      process.env["DOCKER_RUNTIME"] = previousDockerRuntime;
+    }
     await hmacApp?.close();
     resourceManager.resetState();
   });

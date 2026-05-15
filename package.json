@@ -1,12 +1,27 @@
 {
   "name": "modernized-sandbox",
   "version": "0.1.0",
-  "packageManager": "pnpm@11.0.9",
   "type": "module",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.1.2",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.15.0",
+      "onFail": "download"
+    }
+  },
+  "engines": {
+    "node": "24.15.0",
+    "pnpm": "11.1.2"
+  },
   "scripts": {
-    "dev": "tsgo run src/index.ts",
+    "dev": "tsx src/index.ts",
     "build": "tsgo",
-    "start": "tsgo run dist/index.js",
+    "start": "node dist/index.js",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "lint": "oxlint",
@@ -14,6 +29,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@fastify/cors": "11.2.0",
     "@fastify/multipart": "10.0.0",
     "@fastify/sensible": "6.0.4",
     "@marcalexiei/fastify-type-provider-zod": "3.0.0",
@@ -36,6 +52,7 @@
     "lint-staged": "^17.0.4",
     "oxfmt": "0.48.0",
     "oxlint": "1.63.0",
+    "tsx": "^4.21.0",
     "typescript": "6.0.3",
     "vitest": "4.1.5"
   }

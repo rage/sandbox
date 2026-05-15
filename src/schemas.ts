@@ -3,8 +3,10 @@ import { isPrivateOrMetadataUrl } from "./utils/url-safety.js";
 
 const MAX_MEMORY_REQUEST_GB = 4;
 const MAX_CPUS_REQUEST = 2;
-const ALLOWED_DOCKER_IMAGE_PREFIX = "eu.gcr.io/moocfi-public/tmc-sandbox-";
-const ALLOWED_ALTERNATIVE_DOCKER_IMAGES = new Set(["nygrenh/sandbox-next"]);
+export const ALLOWED_DOCKER_IMAGE_PREFIX = "eu.gcr.io/moocfi-public/tmc-sandbox-";
+export const ALLOWED_ALTERNATIVE_DOCKER_IMAGES: ReadonlySet<string> = new Set([
+  "nygrenh/sandbox-next",
+]);
 
 export const ResourceLimitsSchema = z.object({
   memoryGB: z.number().min(0.5).max(MAX_MEMORY_REQUEST_GB),
@@ -47,11 +49,11 @@ export const TaskPayloadSchema = z.object({
 export const MimeTypeSchema = z.enum(["application/x-tar", "application/zstd"]);
 
 export const StatusResponseSchema = z.object({
-  busyInstances: z.number(),
-  reservedCpuCores: z.number(),
-  totalInstances: z.number(),
-  reservedMemory: z.number(),
-  totalMemory: z.number(),
+  busy_instances: z.number(),
+  reserved_cpu_cores: z.number(),
+  total_instances: z.number(),
+  reserved_memory: z.number(),
+  total_memory: z.number(),
 });
 
 export const TaskResponseSchema = z.object({

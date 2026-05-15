@@ -389,52 +389,52 @@ describe("Schemas", () => {
   describe("StatusResponseSchema", () => {
     it("should validate complete status response", () => {
       const result = StatusResponseSchema.safeParse({
-        busyInstances: 2,
-        reservedCpuCores: 2,
-        totalInstances: 8,
-        reservedMemory: 4,
-        totalMemory: 16,
+        busy_instances: 2,
+        reserved_cpu_cores: 2,
+        total_instances: 8,
+        reserved_memory: 4,
+        total_memory: 16,
       });
       expect(result.success).toBe(true);
     });
 
     it("should validate zero values", () => {
       const result = StatusResponseSchema.safeParse({
-        busyInstances: 0,
-        reservedCpuCores: 0,
-        totalInstances: 0,
-        reservedMemory: 0,
-        totalMemory: 0,
+        busy_instances: 0,
+        reserved_cpu_cores: 0,
+        total_instances: 0,
+        reserved_memory: 0,
+        total_memory: 0,
       });
       expect(result.success).toBe(true);
     });
 
     it("should validate floating point values", () => {
       const result = StatusResponseSchema.safeParse({
-        busyInstances: 1.5,
-        reservedCpuCores: 1.5,
-        totalInstances: 8.5,
-        reservedMemory: 4.25,
-        totalMemory: 16.75,
+        busy_instances: 1.5,
+        reserved_cpu_cores: 1.5,
+        total_instances: 8.5,
+        reserved_memory: 4.25,
+        total_memory: 16.75,
       });
       expect(result.success).toBe(true);
     });
 
     it("should reject missing fields", () => {
       const result = StatusResponseSchema.safeParse({
-        busyInstances: 2,
-        reservedCpuCores: 2,
+        busy_instances: 2,
+        reserved_cpu_cores: 2,
       });
       expect(result.success).toBe(false);
     });
 
     it("should reject non-numeric values", () => {
       const result = StatusResponseSchema.safeParse({
-        busyInstances: "2",
-        reservedCpuCores: "2",
-        totalInstances: 8,
-        reservedMemory: 4,
-        totalMemory: 16,
+        busy_instances: "2",
+        reserved_cpu_cores: "2",
+        total_instances: 8,
+        reserved_memory: 4,
+        total_memory: 16,
       });
       expect(result.success).toBe(false);
     });

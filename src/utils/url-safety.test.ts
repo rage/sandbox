@@ -48,6 +48,22 @@ describe("isPrivateOrMetadataUrl", () => {
     it("blocks localhost with port", () => {
       expect(isPrivateOrMetadataUrl("http://localhost:8080/callback")).toBe(true);
     });
+
+    it("blocks localhost with a trailing DNS dot", () => {
+      expect(isPrivateOrMetadataUrl("http://localhost./callback")).toBe(true);
+    });
+
+    it("blocks IPv4-mapped IPv6 loopback addresses", () => {
+      expect(isPrivateOrMetadataUrl("http://[::ffff:7f00:1]/callback")).toBe(true);
+    });
+
+    it("blocks IPv4-mapped IPv6 private addresses", () => {
+      expect(isPrivateOrMetadataUrl("http://[::ffff:c0a8:101]/callback")).toBe(true);
+    });
+
+    it("allows IPv4-mapped IPv6 public addresses", () => {
+      expect(isPrivateOrMetadataUrl("http://[::ffff:808:808]/callback")).toBe(false);
+    });
   });
 
   describe("RFC1918 private ranges (should return true)", () => {

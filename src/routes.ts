@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import type { Multipart } from "@fastify/multipart";
 import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -15,6 +14,7 @@ import {
   getReservedCpuCores,
   getReservedMemory,
   releaseResources,
+  tryResizeReservedResources,
   tryReserveResources,
 } from "./services/resource-manager.js";
 import { SandboxExecutor } from "./services/sandbox-executor.js";
@@ -30,12 +30,35 @@ import type {
 
 const DEFAULT_MEMORY_GB = 1;
 const DEFAULT_CPUS = 1;
+const DEFAULT_RESOURCE_LIMITS: ResourceLimits = {
+  memoryGB: DEFAULT_MEMORY_GB,
+  cpus: DEFAULT_CPUS,
+};
 const NOTIFY_TIMEOUT_MS = 30_000;
 
-/** Safely extract a text value from a multipart field entry. */
-function fieldValue(field: Multipart | Multipart[] | undefined): string | undefined {
-  if (!field || Array.isArray(field) || field.type !== "field") return undefined;
-  return field.value as string;
+type MultipartFields = Record<string, string | undefined>;
+
+function readDockerRuntimeFromEnv(): DockerRuntime {
+  const runtime = process.env["DOCKER_RUNTIME"];
+
+  if (runtime === "runc" || runtime === "runsc") {
+    return runtime;
+  }
+
+  if (runtime === undefined || runtime === "") {
+    throw new Error('DOCKER_RUNTIME is required and must be set to "runc" or "runsc"');
+  }
+
+  throw new Error(`Invalid DOCKER_RUNTIME value "${runtime}": expected "runc" or "runsc"`);
+}
+
+function setMultipartField(fields: MultipartFields, name: string, value: unknown): void {
+  fields[name] = value === undefined || value === null ? undefined : String(value);
+}
+
+function numberField(fields: MultipartFields, name: string): number | undefined {
+  const value = fields[name];
+  return value === undefined ? undefined : Number(value);
 }
 
 export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor): void {
@@ -43,45 +66,85 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
   // If set, callbacks without a valid HMAC-SHA256 signature will be warned (future: rejected).
   // TODO: Reject unsigned callbacks once all clients are updated to sign requests.
   const callbackSecret = process.env["SANDBOX_CALLBACK_SECRET"];
-  const runtime: DockerRuntime = process.env["DOCKER_RUNTIME"] === "runsc" ? "runsc" : "runc";
+  const runtime = readDockerRuntimeFromEnv();
   const exec = executor ?? new SandboxExecutor(app.log, { dockerRuntime: runtime });
 
-  app.get<{ Reply: StatusResponse }>(
-    "/status.json",
-    (): StatusResponse => ({
-      busyInstances: getBusyInstances(),
-      reservedCpuCores: getReservedCpuCores(),
-      totalInstances: TOTAL_CPU_CORES,
-      reservedMemory: getReservedMemory(),
-      totalMemory: TOTAL_MEMORY_GB,
-    }),
-  );
+  app.get<{ Reply: StatusResponse }>("/status.json", (): StatusResponse => {
+    return {
+      busy_instances: getBusyInstances(),
+      reserved_cpu_cores: getReservedCpuCores(),
+      total_instances: TOTAL_CPU_CORES,
+      reserved_memory: getReservedMemory(),
+      total_memory: TOTAL_MEMORY_GB,
+    };
+  });
 
   app.post<{ Reply: TaskResponse }>(
     "/tasks.json",
     async (request: FastifyRequest, _reply: FastifyReply): Promise<TaskResponse> => {
-      const data = await request.file();
+      const fields: MultipartFields = {};
+      let uploadTmpDir = "";
+      let uploadPath = "";
+      let uploadMimeType = "";
+      let reservedLimits: ResourceLimits | undefined;
 
-      if (!data) {
+      const cleanupUpload = async (): Promise<void> => {
+        if (uploadTmpDir) {
+          await rm(uploadTmpDir, { recursive: true, force: true }).catch(() => {});
+        }
+      };
+
+      const releaseReservedResources = (): void => {
+        if (reservedLimits) {
+          releaseResources(reservedLimits);
+          reservedLimits = undefined;
+        }
+      };
+
+      if (!tryReserveResources(DEFAULT_RESOURCE_LIMITS)) {
+        throw new SandboxBusyError();
+      }
+      reservedLimits = DEFAULT_RESOURCE_LIMITS;
+
+      try {
+        for await (const part of request.parts()) {
+          if (part.type === "file") {
+            if (uploadPath) {
+              throw new BadRequestError("Only one file provided");
+            }
+            uploadMimeType = part.mimetype;
+            uploadTmpDir = await mkdtemp(join(tmpdir(), "sandbox-upload-"));
+            uploadPath = join(uploadTmpDir, `${randomUUID()}.upload`);
+            await pipeline(part.file, createWriteStream(uploadPath));
+          } else {
+            setMultipartField(fields, part.fieldname, part.value);
+          }
+        }
+      } catch (error) {
+        await cleanupUpload();
+        releaseReservedResources();
+        throw error;
+      }
+
+      if (!uploadPath) {
+        releaseReservedResources();
         throw new BadRequestError("No file provided");
       }
 
       let taskPayload: z.infer<typeof TaskPayloadSchema>;
       try {
         taskPayload = TaskPayloadSchema.parse({
-          submissionId: fieldValue(data.fields["submission_id"]),
-          dockerImage: fieldValue(data.fields["docker_image"]),
-          memoryLimitGb: data.fields["memory_limit_gb"]
-            ? Number(fieldValue(data.fields["memory_limit_gb"]))
-            : undefined,
-          cpuLimit: data.fields["cpu_limit"]
-            ? Number(fieldValue(data.fields["cpu_limit"]))
-            : undefined,
-          notify: fieldValue(data.fields["notify"]),
-          token: fieldValue(data.fields["token"]),
-          notifySignature: fieldValue(data.fields["notify_signature"]),
+          submissionId: fields["submission_id"],
+          dockerImage: fields["docker_image"],
+          memoryLimitGb: numberField(fields, "memory_limit_gb"),
+          cpuLimit: numberField(fields, "cpu_limit"),
+          notify: fields["notify"],
+          token: fields["token"],
+          notifySignature: fields["notify_signature"],
         });
       } catch (error) {
+        await cleanupUpload();
+        releaseReservedResources();
         if (error instanceof z.ZodError) {
           throw new BadRequestError(
             `Invalid request: ${error.issues.map((issue) => issue.message).join(", ")}`,
@@ -95,6 +158,8 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
       if (callbackSecret) {
         if (taskPayload.notifySignature) {
           if (!verifyHmacSha256(taskPayload.notify, taskPayload.notifySignature, callbackSecret)) {
+            await cleanupUpload();
+            releaseReservedResources();
             throw new BadRequestError("Invalid notify URL signature");
           }
         } else {
@@ -107,10 +172,12 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
 
       let mimeType: z.infer<typeof MimeTypeSchema>;
       try {
-        mimeType = MimeTypeSchema.parse(data.mimetype);
+        mimeType = MimeTypeSchema.parse(uploadMimeType);
       } catch {
+        await cleanupUpload();
+        releaseReservedResources();
         throw new BadRequestError(
-          `Unsupported file type: ${data.mimetype}. Supported types: application/x-tar, application/zstd`,
+          `Unsupported file type: ${uploadMimeType}. Supported types: application/x-tar, application/zstd`,
         );
       }
 
@@ -119,49 +186,41 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
         cpus: taskPayload.cpuLimit ?? DEFAULT_CPUS,
       };
 
-      if (!tryReserveResources(resourceLimits)) {
+      if (!tryResizeReservedResources(reservedLimits, resourceLimits)) {
+        await cleanupUpload();
+        releaseReservedResources();
         throw new SandboxBusyError();
       }
-
-      // Save the multipart stream to a temp file. Release resources and clean up on failure.
-      let uploadTmpDir = "";
-      let uploadPath = "";
-      try {
-        uploadTmpDir = await mkdtemp(join(tmpdir(), "sandbox-upload-"));
-        uploadPath = join(uploadTmpDir, `${randomUUID()}.upload`);
-        await pipeline(data.file, createWriteStream(uploadPath));
-      } catch (error) {
-        releaseResources(resourceLimits);
-        if (uploadTmpDir) await rm(uploadTmpDir, { recursive: true, force: true }).catch(() => {});
-        throw error;
-      }
+      reservedLimits = resourceLimits;
 
       if (taskPayload.submissionId) {
-        request.log.info(`Handling submission ${taskPayload.submissionId}`);
+        request.log.info({ submissionId: taskPayload.submissionId }, "Handling submission");
       }
 
-      const submissionId = taskPayload.submissionId ?? randomUUID();
+      const executionId = randomUUID();
       const notifyUrl = taskPayload.notify;
       const token = taskPayload.token;
+      const log = request.log.child({});
 
       const capturedUploadTmpDir = uploadTmpDir;
+      const capturedResourceLimits = reservedLimits;
       setImmediate(async () => {
         let result: SubmissionResult | undefined;
         let executionError: unknown;
         try {
           result = await exec.executeSubmission(
             uploadPath,
-            submissionId,
+            executionId,
             taskPayload.dockerImage,
             mimeType,
             resourceLimits,
           );
         } catch (error) {
           executionError = error;
-          request.log.error({ error }, "Submission processing failed");
+          log.error({ error }, "Submission processing failed");
         } finally {
           // Release before notifying so the counter is accurate when the callback fires.
-          releaseResources(resourceLimits);
+          releaseResources(capturedResourceLimits);
           // The executor unlinks the upload file; clean up the containing temp dir.
           await rm(capturedUploadTmpDir, { recursive: true, force: true }).catch(() => {});
         }
@@ -194,13 +253,17 @@ export function registerRoutes(app: FastifyInstance, executor?: SandboxExecutor)
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
             signal: controller.signal,
+            redirect: "manual",
           });
+          if (response.status >= 300 && response.status < 400) {
+            throw new Error(`Redirects are not allowed for notify URL (HTTP ${response.status})`);
+          }
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }
-          request.log.info(`Notified ${notifyUrl} with status ${result?.status ?? "failed"}`);
+          log.info(`Notified ${notifyUrl} with status ${result?.status ?? "failed"}`);
         } catch (error) {
-          request.log.error({ error }, `Failed to notify ${notifyUrl}`);
+          log.error({ error }, `Failed to notify ${notifyUrl}`);
         } finally {
           clearTimeout(fetchTimeout);
         }

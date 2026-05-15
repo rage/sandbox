@@ -5,13 +5,21 @@ import * as resourceManager from "./services/resource-manager.js";
 
 describe("Sandbox API Integration", () => {
   let app: FastifyInstance;
+  let previousDockerRuntime: string | undefined;
 
   beforeAll(async () => {
+    previousDockerRuntime = process.env["DOCKER_RUNTIME"];
+    process.env["DOCKER_RUNTIME"] = "runc";
     app = await buildApp({ logger: false });
   });
 
   afterAll(async () => {
     await app.close();
+    if (previousDockerRuntime === undefined) {
+      delete process.env["DOCKER_RUNTIME"];
+    } else {
+      process.env["DOCKER_RUNTIME"] = previousDockerRuntime;
+    }
   });
 
   describe("GET /status.json", () => {
@@ -23,11 +31,54 @@ describe("Sandbox API Integration", () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body).toHaveProperty("busyInstances");
-      expect(body).toHaveProperty("reservedCpuCores");
-      expect(body).toHaveProperty("totalInstances");
-      expect(body).toHaveProperty("reservedMemory");
-      expect(body).toHaveProperty("totalMemory");
+      expect(body).toHaveProperty("busy_instances");
+      expect(body).toHaveProperty("reserved_cpu_cores");
+      expect(body).toHaveProperty("total_instances");
+      expect(body).toHaveProperty("reserved_memory");
+      expect(body).toHaveProperty("total_memory");
+    });
+
+    it("should return all five snake_case status fields", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/status.json",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body).toHaveProperty("busy_instances");
+      expect(body).toHaveProperty("reserved_cpu_cores");
+      expect(body).toHaveProperty("total_instances");
+      expect(body).toHaveProperty("reserved_memory");
+      expect(body).toHaveProperty("total_memory");
+    });
+
+    it("reports busy_instances as the count of in-flight submissions", async () => {
+      resourceManager.resetState();
+      const limits = { cpus: Math.min(2, resourceManager.TOTAL_CPU_CORES), memoryGB: 0.5 };
+      expect(resourceManager.tryReserveResources(limits)).toBe(true);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/status.json",
+      });
+
+      const body = JSON.parse(response.body);
+      expect(body.busy_instances).toBe(1);
+      expect(body.reserved_cpu_cores).toBe(limits.cpus);
+
+      resourceManager.resetState();
+    });
+
+    it("sends CORS headers for browser clients", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/status.json",
+        headers: { origin: "https://example.com" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["access-control-allow-origin"]).toBe("*");
     });
 
     it("should return non-negative values", async () => {
@@ -37,11 +88,11 @@ describe("Sandbox API Integration", () => {
       });
 
       const body = JSON.parse(response.body);
-      expect(body.busyInstances).toBeGreaterThanOrEqual(0);
-      expect(body.reservedCpuCores).toBeGreaterThanOrEqual(0);
-      expect(body.reservedMemory).toBeGreaterThanOrEqual(0);
-      expect(body.totalInstances).toBeGreaterThan(0);
-      expect(body.totalMemory).toBeGreaterThan(0);
+      expect(body.busy_instances).toBeGreaterThanOrEqual(0);
+      expect(body.reserved_cpu_cores).toBeGreaterThanOrEqual(0);
+      expect(body.reserved_memory).toBeGreaterThanOrEqual(0);
+      expect(body.total_instances).toBeGreaterThan(0);
+      expect(body.total_memory).toBeGreaterThan(0);
     });
 
     it("should have reasonable system resource values", async () => {
@@ -51,8 +102,8 @@ describe("Sandbox API Integration", () => {
       });
 
       const body = JSON.parse(response.body);
-      expect(body.totalInstances).toBeGreaterThan(0);
-      expect(body.totalMemory).toBeGreaterThan(0);
+      expect(body.total_instances).toBeGreaterThan(0);
+      expect(body.total_memory).toBeGreaterThan(0);
     });
 
     it("should return consistent structure across multiple calls", async () => {
@@ -64,11 +115,11 @@ describe("Sandbox API Integration", () => {
 
       const bodies = calls.map((r) => JSON.parse(r.body) as Record<string, unknown>);
       const keys = [
-        "busyInstances",
-        "reservedCpuCores",
-        "totalInstances",
-        "reservedMemory",
-        "totalMemory",
+        "busy_instances",
+        "reserved_cpu_cores",
+        "total_instances",
+        "reserved_memory",
+        "total_memory",
       ];
       for (const body of bodies) {
         for (const key of keys) {
@@ -147,7 +198,7 @@ describe("Sandbox API Integration", () => {
 
     it("should not leak reserved resources after a failed request", async () => {
       const before = await app.inject({ method: "GET", url: "/status.json" });
-      const beforeStatus = JSON.parse(before.body) as { busyInstances: number };
+      const beforeStatus = JSON.parse(before.body) as { busy_instances: number };
 
       await app.inject({
         method: "POST",
@@ -156,9 +207,9 @@ describe("Sandbox API Integration", () => {
       });
 
       const after = await app.inject({ method: "GET", url: "/status.json" });
-      const afterStatus = JSON.parse(after.body) as { busyInstances: number };
+      const afterStatus = JSON.parse(after.body) as { busy_instances: number };
 
-      expect(afterStatus.busyInstances).toBe(beforeStatus.busyInstances);
+      expect(afterStatus.busy_instances).toBe(beforeStatus.busy_instances);
     });
   });
 
@@ -211,11 +262,11 @@ describe("Sandbox API Integration", () => {
 
       const body = JSON.parse(response.body);
       const expectedKeys = [
-        "busyInstances",
-        "reservedCpuCores",
-        "totalInstances",
-        "reservedMemory",
-        "totalMemory",
+        "busy_instances",
+        "reserved_cpu_cores",
+        "total_instances",
+        "reserved_memory",
+        "total_memory",
       ];
 
       for (const key of expectedKeys) {

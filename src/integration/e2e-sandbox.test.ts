@@ -208,6 +208,8 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
   return () => {
     let app: FastifyInstance;
     let skipSuite = false;
+    let previousDockerRuntime: string | undefined;
+    let dockerRuntimeEnvWasConfigured = false;
 
     beforeEach(function (ctx) {
       if (fixturesSkipAll || skipSuite) ctx.skip();
@@ -215,6 +217,9 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
 
     beforeAll(async () => {
       if (fixturesSkipAll) return;
+      previousDockerRuntime = process.env["DOCKER_RUNTIME"];
+      process.env["DOCKER_RUNTIME"] = runtime;
+      dockerRuntimeEnvWasConfigured = true;
 
       if (runtime === "runsc") {
         try {
@@ -240,6 +245,13 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
     afterAll(async () => {
       resetState();
       await app?.close();
+      if (dockerRuntimeEnvWasConfigured) {
+        if (previousDockerRuntime === undefined) {
+          delete process.env["DOCKER_RUNTIME"];
+        } else {
+          process.env["DOCKER_RUNTIME"] = previousDockerRuntime;
+        }
+      }
     });
 
     async function submitAndWait(
@@ -363,14 +375,19 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
     describe("resource management", () => {
       afterEach(() => resetState());
 
-      it("busyInstances returns to 0 after submission completes", { timeout: 60_000 }, async () => {
-        const initialRes = await app.inject({ method: "GET", url: "/status.json" });
-        const initial = (JSON.parse(initialRes.body) as { busyInstances: number }).busyInstances;
-        await submitAndWait(passingPythonTar, PYTHON_IMAGE);
-        const afterRes = await app.inject({ method: "GET", url: "/status.json" });
-        const after = (JSON.parse(afterRes.body) as { busyInstances: number }).busyInstances;
-        expect(after).toBe(initial);
-      });
+      it(
+        "busy_instances returns to 0 after submission completes",
+        { timeout: 60_000 },
+        async () => {
+          const initialRes = await app.inject({ method: "GET", url: "/status.json" });
+          const initial = (JSON.parse(initialRes.body) as { busy_instances: number })
+            .busy_instances;
+          await submitAndWait(passingPythonTar, PYTHON_IMAGE);
+          const afterRes = await app.inject({ method: "GET", url: "/status.json" });
+          const after = (JSON.parse(afterRes.body) as { busy_instances: number }).busy_instances;
+          expect(after).toBe(initial);
+        },
+      );
 
       it("returns 503 when resources are fully reserved", async () => {
         const { TOTAL_CPU_CORES, TOTAL_MEMORY_GB, tryReserveResources } =
@@ -393,24 +410,24 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
       });
 
       it(
-        "reservedCpuCores and reservedMemory return to baseline after completion",
+        "reserved_cpu_cores and reserved_memory return to baseline after completion",
         { timeout: 60_000 },
         async () => {
           const beforeRes = await app.inject({ method: "GET", url: "/status.json" });
           const before = JSON.parse(beforeRes.body) as {
-            reservedCpuCores: number;
-            reservedMemory: number;
+            reserved_cpu_cores: number;
+            reserved_memory: number;
           };
 
           await submitAndWait(passingPythonTar, PYTHON_IMAGE);
 
           const afterRes = await app.inject({ method: "GET", url: "/status.json" });
           const after = JSON.parse(afterRes.body) as {
-            reservedCpuCores: number;
-            reservedMemory: number;
+            reserved_cpu_cores: number;
+            reserved_memory: number;
           };
-          expect(after.reservedCpuCores).toBe(before.reservedCpuCores);
-          expect(after.reservedMemory).toBe(before.reservedMemory);
+          expect(after.reserved_cpu_cores).toBe(before.reserved_cpu_cores);
+          expect(after.reserved_memory).toBe(before.reserved_memory);
         },
       );
 
@@ -430,7 +447,7 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
 
       it("releases resources even when submission crashes", { timeout: 60_000 }, async () => {
         const beforeRes = await app.inject({ method: "GET", url: "/status.json" });
-        const before = (JSON.parse(beforeRes.body) as { busyInstances: number }).busyInstances;
+        const before = (JSON.parse(beforeRes.body) as { busy_instances: number }).busy_instances;
 
         await submitAndWait(corruptTar, PYTHON_IMAGE, { callbackTimeoutMs: 10_000 }).catch(
           () => {},
@@ -440,7 +457,7 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
         });
 
         const afterRes = await app.inject({ method: "GET", url: "/status.json" });
-        const after = (JSON.parse(afterRes.body) as { busyInstances: number }).busyInstances;
+        const after = (JSON.parse(afterRes.body) as { busy_instances: number }).busy_instances;
         expect(after).toBeLessThanOrEqual(before);
       });
     });
@@ -477,10 +494,9 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
       it(
         "fork bomb: status is finished or failed (does not hang)",
         { timeout: 60_000 },
-        async () => {
+        async (ctx) => {
           if (process.env.CI) {
-            console.log("Skipping fork bomb test on CI");
-            return;
+            ctx.skip();
           }
           const { result } = await submitAndWait(forkBombPythonTar, PYTHON_IMAGE, {
             callbackTimeoutMs: 60_000,
@@ -526,15 +542,15 @@ function sandboxSuiteBody(runtime: DockerRuntime) {
         expect(result.token).toBe(TEST_TOKEN);
       });
 
-      it("reservedCpuCores returns to baseline after timeout", { timeout: 30_000 }, async () => {
+      it("reserved_cpu_cores returns to baseline after timeout", { timeout: 30_000 }, async () => {
         const beforeRes = await app.inject({ method: "GET", url: "/status.json" });
-        const before = JSON.parse(beforeRes.body) as { reservedCpuCores: number };
+        const before = JSON.parse(beforeRes.body) as { reserved_cpu_cores: number };
 
         await submitAndWait(timeoutPythonTar, PYTHON_IMAGE, { callbackTimeoutMs: 25_000 });
 
         const afterRes = await app.inject({ method: "GET", url: "/status.json" });
-        const after = JSON.parse(afterRes.body) as { reservedCpuCores: number };
-        expect(after.reservedCpuCores).toBe(before.reservedCpuCores);
+        const after = JSON.parse(afterRes.body) as { reserved_cpu_cores: number };
+        expect(after.reserved_cpu_cores).toBe(before.reserved_cpu_cores);
       });
     });
 
