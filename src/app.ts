@@ -1,23 +1,59 @@
-import Koa from "koa"
-import bodyParser from "koa-bodyparser"
-import api from "./controllers"
-import logger from "./middleware/logger"
-import errorHandler from "./middleware/error_handler"
-import { CustomContext, CustomState } from "./types"
-import cors from "@koa/cors"
+import Fastify from "fastify";
+import type { FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
+import sensible from "@fastify/sensible";
+import { registerRoutes } from "./routes.js";
+import { handleError } from "./utils/errors.js";
 
-const app = new Koa<CustomState, CustomContext>()
+const VALID_LOG_LEVELS = ["trace", "debug", "info", "warn", "error", "fatal", "silent"] as const;
+type LogLevel = (typeof VALID_LOG_LEVELS)[number];
 
-app.use(cors())
+function isLogLevel(s: string): s is LogLevel {
+  return (VALID_LOG_LEVELS as readonly string[]).includes(s);
+}
 
-app.use(errorHandler)
+function resolveLogLevel(): LogLevel {
+  const env = process.env["LOG_LEVEL"];
+  if (env !== undefined) {
+    if (!isLogLevel(env)) {
+      throw new Error(`Invalid LOG_LEVEL "${env}": must be one of ${VALID_LOG_LEVELS.join(", ")}`);
+    }
+    return env;
+  }
+  return process.env["NODE_ENV"] === "production" ? "info" : "debug";
+}
 
-app.use(logger)
+function buildLoggerConfig() {
+  const level = resolveLogLevel();
+  if (process.env["NODE_ENV"] === "production") {
+    return { level };
+  }
+  return {
+    level,
+    transport: {
+      target: "pino-pretty",
+      options: {
+        colorize: true,
+        translateTime: "SYS:HH:MM:ss.l",
+        ignore: "pid,hostname",
+      },
+    },
+  };
+}
 
-app.use(bodyParser())
+export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: opts.logger === false ? false : buildLoggerConfig(),
+  });
 
-app.use(api.routes())
+  await app.register(sensible);
+  await app.register(cors);
+  await app.register(multipart);
 
-export type AppContext = typeof app.context
+  app.setErrorHandler(handleError);
 
-export default app
+  registerRoutes(app);
+
+  return app;
+}

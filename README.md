@@ -2,12 +2,15 @@
 
 ## Development environment
 
-Requirements: Node and docker, tar, zstd, ts (from moreutils)
+Requirements: pnpm (nodejs 22+), docker, tar, zstd, ts (from moreutils).
 
 ```bash
-npm ci
-npm run dev
+pnpm install
+export DOCKER_RUNTIME=runc
+pnpm dev
 ```
+
+`DOCKER_RUNTIME` is required. Use `runc` for the standard Docker runtime or `runsc` for gVisor.
 
 If you wish to see the VM Log in the terminal, run:
 
@@ -18,5 +21,5 @@ export PRINT_VM_LOG=1
 ## Running tests
 
 ```bash
-npm run test
+pnpm test
 ```
